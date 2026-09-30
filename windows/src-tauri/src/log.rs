@@ -3,16 +3,21 @@
 
 use std::io::Write;
 
+#[cfg(windows)]
 use windows::Win32::System::SystemInformation::GetLocalTime;
 
 use crate::settings;
 
 pub fn line(message: impl AsRef<str>) {
+    #[cfg(windows)]
     let t = unsafe { GetLocalTime() };
+    #[cfg(windows)]
     let stamp = format!(
         "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
         t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond
     );
+    #[cfg(target_os = "linux")]
+    let stamp = format!("{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs());
     let dir = settings::local_dir();
     if std::fs::create_dir_all(&dir).is_err() {
         return;

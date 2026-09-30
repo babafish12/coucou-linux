@@ -2,7 +2,7 @@
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
 import { Tracked, Spring, clamp } from "../core/anim";
-import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
+import { Bridge, IS_TAURI, onDragDrop, type DragDropPayload } from "../core/bridge";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -341,9 +341,14 @@ export class Island {
 
   // ── File drop ───────────────────────────────────────────────────────────────
 
-  private onDragDrop(e: { type: string; paths?: string[] }) {
+  private onDragDrop(e: DragDropPayload) {
     if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
     if (State.paused) return;
+    if (IS_TAURI && State.agentProvider === "codex" && e.position) {
+      const scale = window.devicePixelRatio || 1;
+      const point = this.panelPoint(e.position.x / scale, e.position.y / scale);
+      this.onCursor(point.x, point.y);
+    }
     switch (e.type) {
       case "enter":
       case "over": {
@@ -386,10 +391,13 @@ export class Island {
    */
   private swallow(path: string) {
     const name = path.split(/[\\/]/).pop() || "file";
-    State.droppedFile = { name, path };
-    State.promptContext = { kind: "file", name, path };
-    State.chatHistory = [];
-    void Bridge.chatReset();
+    // An empty path keeps chat disabled until the inbox copy and reset finish.
+    State.droppedFile = { name, path: "" };
+    State.promptContext = { kind: "file", name };
+    const history = State.chatHistory = [];
+    State.stateOverride = null;
+    State.noteMessage = null;
+    const reset = Bridge.chatReset();
 
     UploadSeq.performDrop(State.uploadDuration);
     this.uploadTens = 0;
@@ -404,19 +412,25 @@ export class Island {
     this.setView("uploading");
     this.ensureRunning();
 
-    void Bridge.ingestFile(path)
-      .then((file) => {
+    void Promise.all([reset, Bridge.ingestFile(path)])
+      .then(([, file]) => {
+        if (State.chatHistory !== history) return;
         State.droppedFile = { name: file.name, path: file.path };
         State.promptContext = { kind: "file", name: file.name, path: file.path };
         State.notify();
       })
       .catch((err) => {
+        if (State.chatHistory !== history) return;
         UploadSeq.deactivate();
+        State.droppedFile = null;
+        State.promptContext = null;
         State.noteMessage = String(err).replace(/^Error:\s*/, "");
         this.engine.animateMorph(0);
         this.setView("note");
         Sound.play("error");
-        window.setTimeout(() => this.setView(State.defaultView()), 2400);
+        window.setTimeout(() => {
+          if (State.chatHistory === history && State.view === "note") this.setView(State.defaultView());
+        }, 2400);
       });
   }
 
@@ -492,7 +506,7 @@ export class Island {
     }
   }
 
-  /** Island rect in window coordinates (origin top-left of the 720×320 window). */
+  /** Island rect in the virtual 720×320 panel used by backend cursor events. */
   private islandRect(): { x: number; y: number; w: number; h: number } {
     const w = this.width.value;
     const hh = this.height.value;
@@ -524,6 +538,14 @@ export class Island {
 
   // ── Input ───────────────────────────────────────────────────────────────────
 
+  /** Linux sizes the native window to the island; Windows keeps the full panel. */
+  private panelPoint(x: number, y: number): { x: number; y: number } {
+    const offset = IS_TAURI && State.agentProvider === "codex"
+      ? (PANEL_W - this.root.clientWidth) / 2
+      : 0;
+    return { x: x + offset, y };
+  }
+
   private wireInput() {
     // The wake strip is the only thing the OS can hit while the island is hidden.
     this.wakeStrip.addEventListener("mouseenter", () => {
@@ -538,7 +560,8 @@ export class Island {
         this.fsm.click();
         return;
       }
-      if (this.isBotHit(e.clientX, e.clientY)) {
+      const point = this.panelPoint(e.clientX, e.clientY);
+      if (this.isBotHit(point.x, point.y)) {
         this.cancelBotHover();
         this.engine.slap();
       }
@@ -558,7 +581,7 @@ export class Island {
     }
   }
 
-  /** Cursor in window-logical coordinates. */
+  /** Backend cursor events already use virtual panel coordinates. */
   onCursor(x: number, y: number) {
     State.mouse = { x, y };
     const rect = this.islandRect();

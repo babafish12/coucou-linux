@@ -12,6 +12,8 @@ const CLAUDE_ID = "integration_claude";
 
 /** Clears the approval card if no decision was made before the hook gave up. */
 let pendingTimeout: number | null = null;
+let finishTimeout: number | null = null;
+let currentSessionId = "";
 
 interface HookPayload {
   hook_event_name?: string;
@@ -113,12 +115,12 @@ function clearSession() {
   if (!t) return;
   t.steps = [];
   t.stepIndex = 0;
-  t.name = "VS Code";
+  t.name = State.agentAppLabel;
   t.pillBadge = null;
 }
 
-export function registerHookHandlers(island: Island) {
-  void onEvent<HookPayload>("hook", (payload) => handleHook(island, payload));
+export async function registerHookHandlers(island: Island) {
+  await onEvent<HookPayload>("hook", (payload) => handleHook(island, payload));
 }
 
 function handleHook(island: Island, payload: HookPayload) {
@@ -131,6 +133,14 @@ function handleHook(island: Island, payload: HookPayload) {
   }
 
   const name = payload.hook_event_name ?? "";
+  if (["SessionStart", "UserPromptSubmit", "PreToolUse", "SessionEnd", "Stop", "StopFailure"].includes(name) && finishTimeout !== null) {
+    window.clearTimeout(finishTimeout);
+    finishTimeout = null;
+  }
+  if (State.agentProvider === "codex" && payload.session_id && payload.session_id !== currentSessionId) {
+    clearSession();
+    currentSessionId = payload.session_id;
+  }
   const cwd = payload.cwd ?? "";
   const raw = lastPathComponent(cwd);
   const projectName = aliasProjectName(raw || "Session");
@@ -201,7 +211,8 @@ function handleHook(island: Island, payload: HookPayload) {
       Sound.play("finish");
       if (focused) surface("finished", true);
       else State.setPillBadge(CLAUDE_ID, "finished");
-      window.setTimeout(() => {
+      finishTimeout = window.setTimeout(() => {
+        finishTimeout = null;
         State.updateTask(CLAUDE_ID, "idle");
         State.setPillBadge(CLAUDE_ID, null);
       }, 5200);

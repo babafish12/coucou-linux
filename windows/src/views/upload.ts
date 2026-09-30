@@ -33,7 +33,8 @@ export function buildUpload(): ViewHost {
   const tags = h(
     "div",
     { class: "drop-tags" },
-    ...["PDF", "Images", "Code", "Docs"].map((t) => h("span", { text: t })),
+    ...(State.agentProvider === "codex" ? ["Images", "Text", "Code"] : ["PDF", "Images", "Code", "Docs"])
+      .map((t) => h("span", { text: t })),
   );
   const card = h(
     "div",
@@ -67,13 +68,14 @@ export function buildUploading(): ViewHost {
   return {
     el,
     sync() {
-      const done = State.uploadProgress >= 0.999;
+      const copying = !State.droppedFile?.path;
+      const done = State.uploadProgress >= 0.999 && !copying;
       const pct = Math.round(State.uploadProgress * 100);
       label.textContent = done
         ? `✓  ${State.droppedFile?.name ?? "File"}`
         : `Uploading ${State.droppedFile?.name ?? "file"}`;
       label.classList.toggle("done", done);
-      percent.textContent = done ? "" : `${pct} %`;
+      percent.textContent = done ? "" : copying && pct >= 100 ? "Copying…" : `${pct} %`;
       const w = State.uploadProgress * 526;
       fill.style.width = `${w}px`;
       glow.style.transform = `translateX(${Math.max(0, w - 14)}px)`;
@@ -86,14 +88,15 @@ export function buildUploading(): ViewHost {
 export function buildChoose(actions: ViewActions): ViewHost {
   const title = h("div", { class: "title" });
   const sub = h("div", { class: "sub", text: "What do you want to do with it?" });
+  const ask = h("button", {
+    class: "btn primary",
+    text: "Ask a question",
+    onclick: () => { if (State.droppedFile?.path) actions.setView("prompt"); },
+  });
   const row = h(
     "div",
     { class: "actions" },
-    h("button", {
-      class: "btn primary",
-      text: "Ask a question",
-      onclick: () => actions.setView("prompt"),
-    }),
+    ask,
     h("button", {
       class: "btn secondary",
       text: "Cancel",
@@ -113,10 +116,13 @@ export function buildChoose(actions: ViewActions): ViewHost {
   return {
     el,
     sync() {
+      const ready = Boolean(State.droppedFile?.path);
+      ask.disabled = !ready;
+      sub.textContent = ready ? "What do you want to do with it?" : "Please wait for the file copy to finish.";
       clear(title);
       title.append(
         h("b", { text: State.droppedFile?.name ?? "file" }),
-        document.createTextNode(" is ready."),
+        document.createTextNode(ready ? " is ready." : " is being copied…"),
       );
     },
   };

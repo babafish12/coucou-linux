@@ -1,5 +1,4 @@
-// Preferences, stored as plain JSON in %APPDATA%\Coucou\settings.json.
-// No secret ever lands here — API keys live in the Windows Credential Manager.
+// Preferences live in the platform config directory. Secrets use the system keyring.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -16,14 +15,37 @@ pub struct Settings {
     pub screen: String,
     pub autostart: bool,
     pub hooks_installed: bool,
-    /// Claude model used by the chat. Changeable in the settings window.
+    /// Chat model override. Empty on Linux to use the user's Codex configuration.
     /// Defaulted explicitly so a settings.json written by an older build still loads.
     #[serde(default = "default_model")]
     pub model: String,
 }
 
 fn default_model() -> String {
-    crate::claude::DEFAULT_MODEL.to_string()
+    #[cfg(windows)]
+    {
+        crate::claude::DEFAULT_MODEL.to_string()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        crate::codex::DEFAULT_MODEL.to_string()
+    }
+}
+
+fn default_integrations() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        vec![
+            "integration_resend".into(),
+            "integration_n8n".into(),
+            "integration_vercel".into(),
+            "integration_github".into(),
+        ]
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Vec::new()
+    }
 }
 
 impl Default for Settings {
@@ -33,12 +55,7 @@ impl Default for Settings {
             sound_volume: 0.12,
             auto_close_interval: 15.0,
             absence_interval: 180.0,
-            active_integrations: vec![
-                "integration_resend".into(),
-                "integration_n8n".into(),
-                "integration_vercel".into(),
-                "integration_github".into(),
-            ],
+            active_integrations: default_integrations(),
             screen: "primary".into(),
             autostart: false,
             hooks_installed: false,
@@ -47,22 +64,50 @@ impl Default for Settings {
     }
 }
 
-/// %APPDATA%\Coucou
+/// %APPDATA%\Coucou on Windows; $XDG_CONFIG_HOME/coucou on Linux.
 pub fn config_dir() -> PathBuf {
-    let base = std::env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("Coucou")
+    #[cfg(target_os = "linux")]
+    {
+        return xdg_dir("XDG_CONFIG_HOME", ".config").join("coucou");
+    }
+    #[cfg(windows)]
+    {
+        let base = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+        base.join("Coucou")
+    }
 }
 
-/// %LOCALAPPDATA%\Coucou — where coucou-hook.exe and the log live.
+/// Windows local application data, or $XDG_DATA_HOME/coucou on Linux.
 pub fn local_dir() -> PathBuf {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("Coucou")
+    #[cfg(target_os = "linux")]
+    {
+        return xdg_dir("XDG_DATA_HOME", ".local/share").join("coucou");
+    }
+    #[cfg(windows)]
+    {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+        base.join("Coucou")
+    }
 }
 
+#[cfg(target_os = "linux")]
+fn xdg_dir(variable: &str, fallback: &str) -> PathBuf {
+    std::env::var_os(variable)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(fallback)
+        })
+}
+
+#[cfg(windows)]
 pub fn hook_exe_path() -> PathBuf {
     local_dir().join("bin").join("coucou-hook.exe")
 }

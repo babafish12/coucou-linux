@@ -48,8 +48,8 @@ export interface ViewLayout {
   agentMode: AgentLayoutMode;
 }
 
-// The window is a fixed 720×320 (largest view) like the macOS panel; the island is
-// drawn inside it, glued to the top edge and horizontally centred.
+// Virtual canvas shared with the macOS/Windows panel. Linux crops the native
+// window to the visible island while retaining these layout coordinates.
 export const PANEL_W = 720;
 export const PANEL_H = 320;
 

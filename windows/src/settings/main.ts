@@ -4,7 +4,7 @@
 
 import "./settings.css";
 import { Bridge, onEvent, type HookStatus } from "../core/bridge";
-import { DEFAULT_SETTINGS, type Settings } from "../core/state";
+import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
@@ -254,6 +254,25 @@ function apiSection(hasKey: boolean): HTMLElement {
   );
 }
 
+// Codex uses the local CLI account; no API key or hook installation is needed.
+async function codexSection(status: HookStatus): Promise<HTMLElement> {
+  const account = await Bridge.codexStatus();
+  const model = h("input", {
+    type: "text", value: settings.model, placeholder: "Codex CLI default",
+    style: "flex:1;min-width:0", spellcheck: "false",
+  }) as HTMLInputElement;
+  model.addEventListener("change", () => { settings.model = model.value.trim(); void save(); });
+  return h("section", {},
+    h("h2", {}, statusDot(account?.loggedIn ?? false), h("span", { text: "Codex" })),
+    h("div", { class: "hint", text: account?.message ?? "Could not check Codex. Run codex login in a terminal." }),
+    h("div", { class: "hint", text: "Chat uses your existing Codex login. No Anthropic or OpenAI API key is required. New chats use a read-only Codex process with shell tools disabled." }),
+    h("div", { class: "row" }, h("label", { text: "Model" }), model),
+    h("div", { class: "row" }, statusDot(status.installed), h("span", { text: status.installed ? "Local session monitor active" : "Waiting for local Codex sessions" })),
+    h("div", { class: "path", text: status.settingsPath }),
+    h("div", { class: "hint", text: "Shows local CLI and desktop activity, tool names and completion. Permission requests stay in Codex. Remote, cloud and ephemeral sessions are not monitored. Your Codex configuration is unchanged." }),
+  );
+}
+
 // ── Integrations section ──────────────────────────────────────────────────────
 
 interface IntegrationDef {
@@ -292,7 +311,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
   function updateNote() {
     const used = settings.activeIntegrations.length;
-    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the Windows Credential Manager, never on disk.`;
+    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the system credential store.`;
   }
 
   for (const def of INTEGRATIONS) {
@@ -424,12 +443,13 @@ async function main() {
   if (boot) {
     settings = { ...settings, ...boot.settings };
     version = boot.version;
+    State.agentProvider = boot.agentProvider;
   }
   const status = (await Bridge.hooksStatus()) ?? {
     installed: false, settingsPath: "", hookPath: "", hookReady: false,
   };
 
-  const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
+  const hasKey = State.agentProvider === "claude" && ((await Bridge.secretPresent("anthropic-api-key")) ?? false);
 
   const keys = [
     "stripe-api-key", "github-token", "vercel-token",
@@ -441,8 +461,7 @@ async function main() {
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
-    claudeSection(status),
-    apiSection(hasKey),
+    ...(State.agentProvider === "codex" ? [await codexSection(status)] : [claudeSection(status), apiSection(hasKey)]),
     integrationsSection(present),
     generalSection(),
     h("div", {

@@ -4,6 +4,8 @@
 
 # Coucou for Windows
 
+Linux builds from this directory too; see [Linux + Codex setup](../docs/LINUX.md).
+
 **Mochi doesn't get a notch on a PC — so it lives at the top of your screen instead.**
 
 Approve Claude Code permissions, watch your session work, drop a file, chat with Claude, keep an eye on your services — without leaving what you're doing.

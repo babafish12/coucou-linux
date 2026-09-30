@@ -57,29 +57,36 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
 
   let sending = false;
   let renderedCount = -1;
+  let renderedHistory: ChatMessage[] | null = null;
 
   async function submit() {
     const query = input.value.trim();
-    if (!query || sending) return;
+    const file = State.droppedFile;
+    if (!query || sending || (file && !file.path)) return;
     input.value = "";
     sending = true;
     Sound.play("send");
 
-    State.chatHistory.push({ id: nextId++, role: "user", content: query });
+    const history = State.chatHistory;
+    const message: ChatMessage = { id: nextId++, role: "user", content: query };
+    history.push(message);
     State.stateOverride = "thinking";
     State.notify();
     onHeightChange();
 
-    const file = State.droppedFile;
     const context: ChatContext | null =
-      State.chatHistory.length === 1 && file ? { kind: "file", name: file.name, path: file.path } : null;
+      file ? { kind: "file", name: file.name, path: file.path } : null;
 
     try {
       const reply = await Bridge.chatSend(query, context);
-      State.chatHistory.push({ id: nextId++, role: "assistant", content: reply.text });
+      if (State.chatHistory !== history) return;
+      history.push({ id: nextId++, role: "assistant", content: reply.text });
       State.stateOverride = null;
       Sound.play("finish");
     } catch (err) {
+      if (State.chatHistory !== history) return;
+      if (history[history.length - 1] === message) history.pop();
+      input.value = query;
       State.stateOverride = null;
       State.noteMessage = String(err).replace(/^Error:\s*/, "");
       State.view = "note";
@@ -87,11 +94,15 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
     } finally {
       sending = false;
       State.notify();
-      onHeightChange();
-      input.focus();
+      if (State.chatHistory === history) {
+        onHeightChange();
+        if (State.view === "prompt") input.focus();
+      }
     }
   }
 
+  // Dock windows need an explicit activation when returning from another app.
+  input.addEventListener("pointerdown", () => void Bridge.focusWindow(true));
   send.addEventListener("click", () => void submit());
   input.addEventListener("keydown", (e) => {
     if ((e as KeyboardEvent).key === "Enter") {
@@ -114,16 +125,19 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
 
       const thinking = State.stateOverride === "thinking";
       const count = State.chatHistory.length + (thinking ? 0.5 : 0);
-      if (count !== renderedCount) {
+      if (count !== renderedCount || renderedHistory !== State.chatHistory) {
         renderedCount = count;
+        renderedHistory = State.chatHistory;
         clear(log);
         for (const m of State.chatHistory) log.append(bubble(m));
         if (thinking) log.append(typingDots());
         log.scrollTop = log.scrollHeight;
       }
 
-      input.placeholder = State.chatHistory.length === 0 ? "Ask me anything…" : "Continue…";
-      input.disabled = sending;
+      const copying = Boolean(file && !file.path);
+      input.placeholder = copying ? "Copying attachment…" : State.chatHistory.length === 0 ? "Ask me anything…" : "Continue…";
+      input.disabled = sending || copying;
+      send.disabled = sending || copying;
     },
     focus() {
       input.focus();

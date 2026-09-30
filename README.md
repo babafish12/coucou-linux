@@ -71,6 +71,20 @@ There is no notch on a PC, so the island slides out of the top edge of the scree
 instead of hiding inside one. See [`windows/README.md`](windows/README.md) for the
 rest of the differences.
 
+### Linux with Codex
+
+This checkout includes a Linux port of the Tauri application. It uses your local
+Codex login for chat and watches local Codex activity, with no Claude account or
+Anthropic key. Install and start it on Linux:
+
+```sh
+./scripts/install-linux.sh --autostart
+~/.local/bin/coucou
+```
+
+See [Linux setup and supported features](docs/LINUX.md) for dependencies,
+Hyprland/XWayland support, tests, and the limits of session monitoring.
+
 ### Build from source
 
 **macOS** — requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).

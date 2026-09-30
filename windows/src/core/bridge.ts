@@ -26,10 +26,13 @@ export interface BootInfo {
   screen: { x: number; y: number; width: number; height: number; scale: number };
   version: string;
   hookPath: string;
+  agentProvider: "codex" | "claude";
 }
 
 export const Bridge = {
   boot: () => call<BootInfo>("boot"),
+  codexMonitorReady: () => call<void>("codex_monitor_ready"),
+  codexStatus: () => call<{ installed: boolean; loggedIn: boolean; message: string }>("codex_status"),
 
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
 
@@ -146,6 +149,8 @@ export type BridgeEvent =
 export interface DragDropPayload {
   type: "enter" | "over" | "drop" | "leave";
   paths?: string[];
+  /** Physical pixels relative to the webview; absent on leave. */
+  position?: { x: number; y: number };
 }
 
 /** Files dragged onto the island. Only reaches us when the window takes the mouse. */

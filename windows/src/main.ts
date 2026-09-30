@@ -14,12 +14,12 @@ async function main() {
 
   void Sound.preload();
 
-  const island = new Island(root);
-
   const boot = await Bridge.boot();
   if (boot) {
     State.settings = { ...State.settings, ...boot.settings };
+    State.agentProvider = boot.agentProvider;
   }
+  const island = new Island(root);
   island.applySettings();
   State.loadIntegrationTasks();
 
@@ -30,6 +30,7 @@ async function main() {
     if (State.paused === on) return;
     State.paused = on;
     void Bridge.setPaused(on);
+    if (!on && State.agentProvider === "codex") void Bridge.codexMonitorReady();
   };
 
   await onEvent<string>("tray", (what) => {
@@ -60,10 +61,11 @@ async function main() {
     void refreshConfigured();
   });
 
-  registerHookHandlers(island);
+  await registerHookHandlers(island);
   registerIntegrationHandlers(island);
 
   island.launch();
+  if (State.agentProvider === "codex") await Bridge.codexMonitorReady();
 
   // In a plain browser there is no wake strip behind the cursor: make the whole
   // page wake the island so the visuals can be checked with `npm run dev`.

@@ -111,6 +111,11 @@ export const DEFAULT_SETTINGS: Settings = {
 type Listener = () => void;
 
 class AppState {
+  agentProvider: "codex" | "claude" = "claude";
+
+  get agentLabel(): string { return this.agentProvider === "codex" ? "Codex" : "Claude Code"; }
+  get agentAppLabel(): string { return this.agentProvider === "codex" ? "Codex" : "VS Code"; }
+
   mode: IslandMode = "hidden";
   view: IslandViewName = "overview";
 
@@ -205,7 +210,7 @@ class AppState {
       const shouldLoad =
         proto.id === "integration_claude" || this.settings.activeIntegrations.includes(proto.id);
       const idx = this.tasks.findIndex((t) => t.id === proto.id);
-      if (shouldLoad && idx < 0) this.tasks.push({ ...proto, steps: [] });
+      if (shouldLoad && idx < 0) this.tasks.push({ ...proto, name: proto.id === "integration_claude" ? this.agentAppLabel : proto.name, steps: [] });
       if (!shouldLoad && idx >= 0) this.tasks.splice(idx, 1);
     }
     // Keep the declared order so pills never shuffle.
