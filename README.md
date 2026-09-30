@@ -1,171 +1,173 @@
-<div align="center">
+# coucou-linux
 
-<img src="NotchBuddy/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="96" alt="Coucou icon">
+**A Linux desktop companion for local Codex sessions, based on [Coucou](https://github.com/Louis-CFM/coucou).**
 
-# Coucou
+Mochi lives at the top of your screen, shows Codex activity, and lets you chat or
+ask questions about files using your existing Codex login. No Claude account,
+Anthropic key, or separate OpenAI API key is required for the Linux integration.
 
-**A tiny friend that lives in your MacBook's notch — or at the top of your screen on Windows — and keeps an eye on your Claude Code sessions.**
-
-Approve permissions, watch your agents work, drop a file, chat with Claude — all without leaving what you're doing.
-
-![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)
-![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)
-![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
-![SwiftUI](https://img.shields.io/badge/SwiftUI-native-0A84FF)
+![Linux](https://img.shields.io/badge/Linux-Arch%20%2B%20Hyprland-1793D1?logo=archlinux&logoColor=white)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![GitHub stars](https://img.shields.io/github/stars/Louis-CFM/coucou?style=social)
+[![Code license: MIT](https://img.shields.io/badge/code-MIT-green)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/babafish12/coucou-linux?style=social)](https://github.com/babafish12/coucou-linux)
 
-<img src="docs/media/demo.gif" width="760" alt="Coucou in action">
+This fork focuses on Linux and Codex. It has been tested on Arch Linux with
+Hyprland using XWayland. The installed application is still called **Coucou** and
+its launcher is `coucou`.
 
-</div>
+## Install on Linux
 
----
+### Requirements
 
-## Why
+- Node.js 20+, npm, Rust/Cargo, Python 3, Git, and native build tools.
+- GTK 3, WebKit2GTK 4.1, D-Bus, and AppIndicator development packages.
+- An X11 session, or XWayland on a Wayland desktop such as Hyprland.
+- Codex CLI installed on your `PATH`, with a working login.
 
-Some studios showed off gorgeous notch companions… and never let anyone use them.
-**Coucou is the open version.** Every line of code, every animation, every sound — free to use, read, fork and remix.
-
-Meet **Mochi**: a soft little squircle with big eyes that pops out of your notch, waves hello, follows your cursor with its eyes, gets annoyed when you poke it (and dizzy if you insist), and tells you the moment Claude Code needs you.
-
-## Features
-
-- 🤖 **Claude Code, live** — see every session in your notch: what it reads, edits and runs, step by step. Finished? Mochi does a happy little jump.
-- ✅ **Approve from the notch** — Claude Code permission requests show up with **Allow / Deny**. One click, back to work.
-- 🧑‍💻 **Jump to the right terminal** — open the exact terminal window of a session *(macOS)*.
-- 💬 **Ask Claude anything** — built-in chat, straight from the notch.
-- 📎 **Drop a file on the notch** — Mochi turns into a box and swallows it, then ask a question about it or send it by email *(email: macOS, Mail.app)*.
-- 🪟 **Drag Mochi onto any window** — attach that window as context for Claude *(macOS)*.
-- 🔌 **Integrations** — Stripe payments, n8n workflows, GitHub, Vercel deployments, Resend emails, Notion, Cal.com. Each one gets its own little colored Mochi.
-- 🎭 **A real character** — idle breathing, blinks, eyes on a sphere that follow your mouse, emotes, 28 handcrafted sounds, a greeting on launch.
-- 🫥 **Invisible when idle** — hides away when nothing is running, peeks out when you hover the notch (the top edge of the screen on Windows).
-- 🔒 **Private by design** — no telemetry, no account. Keys live in your macOS Keychain or Windows Credential Manager. The app only talks to the services you plug in.
-
-<table>
-<tr>
-<td><img src="docs/media/claude-code.png" alt="Claude Code session"></td>
-<td><img src="docs/media/stripe.png" alt="Stripe payments"></td>
-</tr>
-<tr>
-<td><img src="docs/media/chat.png" alt="Chat with Claude"></td>
-<td><img src="docs/media/dizzy.png" alt="Too many hits"></td>
-</tr>
-</table>
-
-## Install
-
-### Download for macOS
-
-1. Grab the latest `Coucou.zip` from [Releases](https://github.com/Louis-CFM/coucou/releases).
-2. Unzip and move **Coucou.app** to `/Applications`.
-3. Launch. This build isn't notarized by Apple yet, so the first time macOS says it can't verify the developer: open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** (only once).
-
-### Download for Windows
-
-1. Grab [`Coucou-Windows-setup.exe`](https://github.com/Louis-CFM/coucou/releases/download/windows-latest/Coucou-Windows-setup.exe) — always the newest Windows build.
-2. Run it. The installer isn't code-signed yet, so SmartScreen warns about it: click **More info → Run anyway**. It installs for your user only and asks for no administrator rights.
-3. Launch — Mochi appears at the top of your main screen.
-
-There is no notch on a PC, so the island slides out of the top edge of the screen
-instead of hiding inside one. See [`windows/README.md`](windows/README.md) for the
-rest of the differences.
-
-### Linux with Codex
-
-This checkout includes a Linux port of the Tauri application. It uses your local
-Codex login for chat and watches local Codex activity, with no Claude account or
-Anthropic key. Install and start it on Linux:
+On Arch Linux, install the system dependencies with:
 
 ```sh
+sudo pacman -S --needed base-devel git rust nodejs npm python pkgconf gtk3 webkit2gtk-4.1 libayatana-appindicator librsvg xorg-xwayland
+```
+
+This changes system packages and requires administrator access. Skip it if the
+dependencies are already installed. The Coucou installer itself runs as your
+normal user.
+
+### Build, install, and start
+
+```sh
+git clone https://github.com/babafish12/coucou-linux.git
+cd coucou-linux
+
+codex login status
+# If you are not signed in yet, run: codex login
+
 ./scripts/install-linux.sh --autostart
 ~/.local/bin/coucou
 ```
 
-See [Linux setup and supported features](docs/LINUX.md) for dependencies,
-Hyprland/XWayland support, tests, and the limits of session monitoring.
+The installer builds the application, installs it under `~/.local/`, and adds a
+**Coucou** application menu entry. `--autostart` also starts it when you sign in;
+omit that option if you prefer to launch it manually. Existing preferences are
+preserved, and changed installation files receive dated backups.
 
-### Build from source
+For paths, configuration, and more setup details, see the
+[Linux guide](docs/LINUX.md).
 
-**macOS** — requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+## Features
 
-```bash
-brew install xcodegen
-git clone https://github.com/Louis-CFM/coucou.git
-cd coucou/NotchBuddy
-xcodegen
-open NotchBuddy.xcodeproj   # then ⌘R
+- **Local Codex activity:** shows work, tool names, and completion from local
+  interactive CLI and desktop sessions. With concurrent sessions, the most
+  recently active session is shown.
+- **Chat with your Codex account:** ask questions from the island using the
+  locally installed CLI and its saved login.
+- **File context:** drop UTF-8 text or code files up to 200 KB, or supported images
+  up to 10 MB, then ask questions about them. Original files are not modified.
+- **A window that fits the island:** the native window follows the visible
+  island's dimensions, including during animations. Collapsing it also shrinks
+  the actual window, so it does not retain a large invisible area that blocks
+  the application behind it.
+- **Mochi animations and sounds:** the character and island UI are shared with
+  the original project.
+- **Optional integrations:** service integrations start disabled. Their
+  credentials use Linux Secret Service, such as GNOME Keyring or KeePassXC.
+- **Per-user installation:** application menu entry, optional autostart, and XDG
+  settings and data paths.
+
+## Use it
+
+Hover near the top centre of your main display to reveal the island, then click
+to open it. Start a local Codex session to see its activity, open chat to ask a
+question, or drop a supported file onto the island for context.
+
+Open settings from the system tray or run:
+
+```sh
+~/.local/bin/coucou --settings
 ```
 
-**Windows** — requirements: [Rust](https://rustup.rs), Node 20+, MSVC build tools.
+Settings include sounds, startup, display selection, optional integrations, and
+the Codex model. Leave Model blank to use the CLI default. Quit from the system
+tray menu.
 
-```powershell
-git clone https://github.com/Louis-CFM/coucou.git
-cd coucou/windows
-npm install
-npm run pack                # installer lands in windows/release/
+### Current limits
+
+- Approvals and permission questions stay in Codex; the activity monitor cannot
+  approve them from the island.
+- Built-in chat uses ephemeral, read-only Codex processes with shell tools
+  disabled. It answers questions and does not perform agent actions on files.
+- Cloud, remote, subagent, `codex exec`, and ephemeral sessions are not monitored.
+  Monitoring reads local session logs, whose format may change with Codex updates.
+- PDF and other unsupported binary attachments report an error.
+- The positioned island requires X11/XWayland. Native Wayland positioning is not
+  supported. On Hyprland it sits below the reserved top panel; when hidden, a
+  small 240×6 wake strip remains. Other compositors may apply different window
+  policies. See [Linux window support](docs/LINUX.md#linux-window-support).
+
+## Update an existing installation
+
+From your checkout, pull the latest source and run the installer again:
+
+```sh
+git pull --ff-only
+./scripts/install-linux.sh
 ```
 
-## Setup
+Quit the running app through its tray menu and launch **Coucou** again to use the
+new build. Reinstalling without `--autostart` leaves an existing startup entry
+unchanged; disable startup in settings if you no longer want it.
 
-Click the Coucou icon in the menu bar (macOS) or in the system tray (Windows) → **Settings…**
+## Development and contributing
 
-| What | Why | Where the key goes |
-|---|---|---|
-| **Claude Code hooks** | live sessions and approvals | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
-| **Anthropic API key** | chat and questions about files | Keychain / Windows Credential Manager |
-| Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the integration pills | Keychain / Windows Credential Manager, all optional |
+The Linux and Windows Tauri application lives in `windows/` for historical
+reasons. It uses Rust for the native backend and TypeScript/Canvas for the UI.
+Linux selects the Codex backend; Windows retains its Claude integration. The
+original macOS Swift project lives in `NotchBuddy/`.
 
-If Coucou isn't running, the hook exits immediately: **Claude Code is never blocked.**
+After installing the dependencies above:
 
-## Things to try
+```sh
+cd windows
+npm ci
+npm run build
+cargo test --workspace
+npm run tauri -- dev
+```
 
-| Do this | Mochi does that |
-|---|---|
-| Hover the notch (top edge on Windows) | peeks out and says hi 👋 |
-| Click it | opens |
-| Hover Mochi | blinks, eyes grow |
-| Click Mochi | squish + annoyed |
-| Click 3 times fast | 😵‍💫 dizzy for a few seconds |
-| Drag a file onto the island | turns into a box and swallows it |
-| Drag Mochi onto a window *(macOS)* | attaches it as context |
+To build a Linux release executable without a distribution package:
 
-## How it works
+```sh
+npm run tauri -- build --no-bundle
+```
 
-**macOS**
+`npm run build` checks TypeScript and builds the UI. Cargo tests cover Codex
+events, session monitoring, chat responses, attachments, and window input
+regions. Window geometry and clicks reaching background applications also need
+verification on a real desktop.
 
-- **Island**: a borderless `NSPanel` hugging the notch, driven by a small state machine (`hidden → petit → home`).
-- **Character**: drawn in SwiftUI `Canvas` + `TimelineView` at 60 fps — squircle body, eyes projected on a sphere, spring animations. No Rive, no Lottie, no images.
-- **Claude Code**: a tiny `nb-hook` script receives hook events and forwards them over a Unix socket to the app. For approvals it waits for your click, then answers the hook.
-- **Integrations**: lightweight pollers, paused when nothing is watching.
-- **Sounds**: 28 short WAVs played through preloaded `AVAudioPlayer`s.
+Send Linux improvements through
+[pull requests](https://github.com/babafish12/coucou-linux/pulls). For window
+fixes, include the compositor, X11/Wayland session type, display scaling, and
+steps to reproduce. Keep changes focused and include the relevant build or test
+results.
+The inherited [contribution guide](CONTRIBUTING.md) covers the macOS project.
 
-The macOS app is native Swift 6 / SwiftUI / AppKit with **zero third-party dependencies**.
+## Original project and credits
 
-**Windows**
+Original Coucou, Mochi, artwork, animations, and sounds by
+[Louis Raillé](https://louisraille.fr). Linux and Codex adaptations are maintained
+in [babafish12/coucou-linux](https://github.com/babafish12/coucou-linux).
+This is an independent fork.
 
-- A [Tauri 2](https://tauri.app) app (Rust + TypeScript): the island is a transparent, always-on-top window that never steals focus, Mochi is drawn in Canvas 2D with the same shapes, timings and sounds as on the Mac.
-- Claude Code hooks go through a tiny `coucou-hook.exe` and a named pipe; keys live in Windows Credential Manager.
-- Details and differences in [`windows/README.md`](windows/README.md).
-
-## Contributing
-
-Issues and PRs are very welcome — new integrations, new emotes, new sounds, bug fixes. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Credits
-
-Built by [Louis Raillé](https://louisraille.fr) with Claude Code.
-Inspired by the notch-companion concepts shared by design studios — this project is independent and not affiliated with any of them.
+For upstream macOS and Windows downloads and documentation, visit
+[Louis-CFM/coucou](https://github.com/Louis-CFM/coucou).
 
 ## License
 
-- **Code:** [MIT](LICENSE) — use it, fork it, learn from it, just keep the copyright notice.
-- **Name, Mochi character, icon, sounds and media:** © Louis Raillé, all rights reserved — see [LICENSE-ASSETS.md](LICENSE-ASSETS.md). Shipping your own fork? Give it your own name and character.
-
-<div align="center">
-
-**If Mochi made you smile, a ⭐ helps a lot.**
-
-[Website](https://louis-cfm.github.io/coucou/) · [Privacy](https://louis-cfm.github.io/coucou/privacy.html) · [Terms](https://louis-cfm.github.io/coucou/terms.html) · [Support](https://louis-cfm.github.io/coucou/support.html)
-
-</div>
+- **Source code:** [MIT](LICENSE); retain the copyright notice.
+- **Coucou and Mochi names, character, icons, sounds, and media:** © Louis Raillé,
+  with separate terms in [LICENSE-ASSETS.md](LICENSE-ASSETS.md). These assets are
+  not covered by the MIT license. Read those terms before distributing an app
+  or derivative; they require permission to ship with the upstream branding and
+  assets, or replacing them with your own.
