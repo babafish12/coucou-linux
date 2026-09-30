@@ -3,7 +3,7 @@
 // integrations land here too in a later stage.
 
 import "./settings.css";
-import { Bridge, onEvent, type HookStatus } from "../core/bridge";
+import { Bridge, onEvent, type CodexModel, type HookStatus } from "../core/bridge";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
@@ -255,18 +255,139 @@ function apiSection(hasKey: boolean): HTMLElement {
 }
 
 // Codex uses the local CLI account; no API key or hook installation is needed.
-async function codexSection(status: HookStatus): Promise<HTMLElement> {
-  const account = await Bridge.codexStatus();
-  const model = h("input", {
-    type: "text", value: settings.model, placeholder: "Codex CLI default",
-    style: "flex:1;min-width:0", spellcheck: "false",
-  }) as HTMLInputElement;
-  model.addEventListener("change", () => { settings.model = model.value.trim(); void save(); });
+function codexSection(status: HookStatus): HTMLElement {
+  let models: CodexModel[] = [];
+  let loading = false;
+  let saving = false;
+  const dot = statusDot(false);
+  const account = h("div", { class: "hint", text: "Checking your Codex login…" });
+  const model = h("select", { id: "codex-model", style: "flex:1;min-width:0" }) as HTMLSelectElement;
+  const effort = h("select", { id: "codex-reasoning", style: "flex:1;min-width:0" }) as HTMLSelectElement;
+  const modelHint = h("div", { class: "hint", "aria-live": "polite" });
+  const effortHint = h("div", { class: "hint", "aria-live": "polite" });
+  const feedback = h("div", { "aria-live": "polite", role: "status" });
+  const refresh = h("button", { text: "Refresh models" });
+
+  const effortName = (value: string) => ({
+    none: "None", minimal: "Minimal", low: "Low", medium: "Medium", high: "High",
+    xhigh: "Extra high", max: "Maximum", ultra: "Ultra",
+  }[value] ?? value);
+  const selectedModel = () => models.find((entry) => model.value ? entry.model === model.value : entry.isDefault);
+
+  function busy() {
+    model.disabled = loading || saving || models.length === 0;
+    effort.disabled = loading || saving || !selectedModel();
+    refresh.disabled = loading || saving;
+    refresh.textContent = loading ? "Loading models…" : "Refresh models";
+  }
+
+  function describeEffort() {
+    const selected = selectedModel();
+    const value = effort.value || selected?.defaultReasoningEffort;
+    effortHint.textContent = selected?.supportedReasoningEfforts.find((entry) => entry.reasoningEffort === value)?.description
+      ?? "Choose a model to see its supported reasoning levels.";
+  }
+
+  function drawEfforts(preferred: string) {
+    const selected = selectedModel();
+    clear(effort);
+    effort.append(h("option", {
+      value: "", text: selected?.defaultReasoningEffort
+        ? `Model default (${effortName(selected.defaultReasoningEffort)})` : "Model default",
+    }));
+    for (const option of selected?.supportedReasoningEfforts ?? []) {
+      effort.append(h("option", { value: option.reasoningEffort, text: effortName(option.reasoningEffort) }));
+    }
+    if (preferred && !selected?.supportedReasoningEfforts.some((entry) => entry.reasoningEffort === preferred)) {
+      effort.append(h("option", { value: preferred, text: `${effortName(preferred)} (unavailable)`, disabled: true }));
+    }
+    effort.value = preferred;
+    modelHint.textContent = selected?.description ?? (settings.model
+      ? "Your saved model is unavailable. Choose another model or refresh the list."
+      : "Models and reasoning levels come from your Codex installation.");
+    describeEffort();
+    busy();
+  }
+
+  function drawModels() {
+    clear(model);
+    const recommended = models.find((entry) => entry.isDefault);
+    model.append(h("option", {
+      value: "", text: recommended ? `Codex default (${recommended.displayName})` : "Codex default",
+      disabled: models.length > 0 && !recommended,
+    }));
+    for (const entry of models) {
+      model.append(h("option", { value: entry.model, text: entry.displayName }));
+    }
+    if (settings.model && !models.some((entry) => entry.model === settings.model)) {
+      model.append(h("option", { value: settings.model, text: `${settings.model} (unavailable)`, disabled: true }));
+    }
+    model.value = settings.model;
+    drawEfforts(settings.reasoningEffort);
+  }
+
+  async function loadModels(force: boolean) {
+    loading = true;
+    busy();
+    clear(feedback);
+    try {
+      models = await Bridge.codexModels(force);
+      drawModels();
+    } catch (error) {
+      feedback.append(h("div", { class: "notice err", text: String(error).replace(/^Error:\s*/, "") }));
+    } finally {
+      loading = false;
+      busy();
+    }
+  }
+
+  async function saveSelection(reset: boolean) {
+    saving = true;
+    busy();
+    clear(feedback);
+    feedback.append(h("div", { class: "hint", text: "Saving…" }));
+    try {
+      settings = await Bridge.codexSetPreferences(model.value, effort.value);
+      clear(feedback);
+      feedback.append(h("div", { class: "notice ok", text: reset
+        ? "Saved. Reasoning was reset to the model default because the previous level is unsupported. Applies to your next reply."
+        : "Saved. Applies to your next reply." }));
+    } catch (error) {
+      clear(feedback);
+      feedback.append(h("div", { class: "notice err", text: String(error).replace(/^Error:\s*/, "") }));
+    } finally {
+      saving = false;
+      drawModels();
+    }
+  }
+
+  model.addEventListener("change", () => {
+    const selected = selectedModel();
+    const previous = settings.reasoningEffort;
+    const supported = !previous || selected?.supportedReasoningEfforts.some((entry) => entry.reasoningEffort === previous);
+    drawEfforts(supported ? previous : "");
+    void saveSelection(!supported);
+  });
+  effort.addEventListener("change", () => { describeEffort(); void saveSelection(false); });
+  refresh.addEventListener("click", () => void loadModels(true));
+
+  drawModels();
+  void loadModels(false);
+  void Bridge.codexStatus().then((result) => {
+    dot.style.background = result?.loggedIn ? "#22c55e" : "#f4505e";
+    account.textContent = result?.message ?? "Could not check Codex. Run codex login in a terminal.";
+  });
+
   return h("section", {},
-    h("h2", {}, statusDot(account?.loggedIn ?? false), h("span", { text: "Codex" })),
-    h("div", { class: "hint", text: account?.message ?? "Could not check Codex. Run codex login in a terminal." }),
-    h("div", { class: "hint", text: "Chat uses your existing Codex login. No Anthropic or OpenAI API key is required. New chats use a read-only Codex process with shell tools disabled." }),
-    h("div", { class: "row" }, h("label", { text: "Model" }), model),
+    h("h2", {}, dot, h("span", { text: "Codex" })),
+    account,
+    h("div", { class: "hint", text: "Chat uses your existing Codex login. Model and reasoning choices apply to chat in Coucou." }),
+    h("div", { class: "row" }, h("label", { for: "codex-model", text: "Model" }), model),
+    modelHint,
+    h("div", { class: "row" }, h("label", { for: "codex-reasoning", text: "Reasoning" }), effort),
+    effortHint,
+    h("div", { class: "row" }, refresh, h("span", { class: "hint", text: "Refresh after changing your Codex account." })),
+    feedback,
     h("div", { class: "row" }, statusDot(status.installed), h("span", { text: status.installed ? "Local session monitor active" : "Waiting for local Codex sessions" })),
     h("div", { class: "path", text: status.settingsPath }),
     h("div", { class: "hint", text: "Shows local CLI and desktop activity, tool names and completion. Permission requests stay in Codex. Remote, cloud and ephemeral sessions are not monitored. Your Codex configuration is unchanged." }),
@@ -461,7 +582,7 @@ async function main() {
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
-    ...(State.agentProvider === "codex" ? [await codexSection(status)] : [claudeSection(status), apiSection(hasKey)]),
+    ...(State.agentProvider === "codex" ? [codexSection(status)] : [claudeSection(status), apiSection(hasKey)]),
     integrationsSection(present),
     generalSection(),
     h("div", {

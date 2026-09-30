@@ -90,8 +90,10 @@ export interface Settings {
   screen: "primary" | "cursor";
   autostart: boolean;
   hooksInstalled: boolean;
-  /** Claude model used by the chat. */
+  /** Chat model. Empty on Linux selects the Codex default. */
   model: string;
+  /** Empty selects the model's default reasoning effort. */
+  reasoningEffort: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -106,6 +108,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autostart: false,
   hooksInstalled: false,
   model: "claude-opus-5",
+  reasoningEffort: "",
 };
 
 type Listener = () => void;

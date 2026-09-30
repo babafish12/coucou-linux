@@ -33,6 +33,9 @@ export const Bridge = {
   boot: () => call<BootInfo>("boot"),
   codexMonitorReady: () => call<void>("codex_monitor_ready"),
   codexStatus: () => call<{ installed: boolean; loggedIn: boolean; message: string }>("codex_status"),
+  codexModels: (refresh = false) => callOrThrow<CodexModel[]>("codex_models", { refresh }),
+  codexSetPreferences: (model: string, reasoningEffort: string) =>
+    callOrThrow<Settings>("codex_set_preferences", { model, reasoningEffort }),
 
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
 
@@ -107,6 +110,15 @@ export interface IntegrationUpdate {
   data: Record<string, unknown>;
   error: string | null;
   event: { success: boolean; label: string; detail: string | null } | null;
+}
+
+export interface CodexModel {
+  model: string;
+  displayName: string;
+  description: string;
+  isDefault: boolean;
+  defaultReasoningEffort: string;
+  supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
 }
 
 export type ChatContext =

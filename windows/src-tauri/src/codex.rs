@@ -33,6 +33,7 @@ The JSON below contains the conversation; role fields distinguish user and assis
 pub struct Chat {
     state: Mutex<Conversation>,
     sending: tokio::sync::Mutex<()>,
+    pub models: crate::codex_models::Catalog,
 }
 
 #[derive(Default)]
@@ -131,6 +132,7 @@ pub async fn account_status() -> AccountStatus {
 pub async fn send(
     chat: &Chat,
     model: &str,
+    reasoning_effort: &str,
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
@@ -148,6 +150,7 @@ pub async fn send(
         let state = chat.state.lock().unwrap();
         (state.generation, state.turns.clone(), state.context.clone())
     };
+    let selection = chat.models.resolve(model, reasoning_effort).await?;
     let context = if turns.is_empty() {
         prepare_context(context)?
     } else {
@@ -169,7 +172,7 @@ pub async fn send(
     let working_dir = settings::local_dir().join("chat");
     std::fs::create_dir_all(&working_dir)
         .map_err(|e| format!("Cannot create the chat directory: {e}"))?;
-    let mut command = chat_command(model, &working_dir);
+    let mut command = chat_command(&selection.model, &selection.reasoning_effort, &working_dir);
     if let Some(image) = &context.image {
         let checked = inbox_file(image, &files::inbox_dir())?;
         command.arg("--image").arg(checked);
@@ -210,7 +213,7 @@ fn trim_history(turns: &mut Vec<Turn>) {
     }
 }
 
-fn cli() -> Command {
+pub(crate) fn cli() -> Command {
     let mut command = Command::new("codex");
     command.kill_on_drop(true);
     // Use the CLI's saved login, never accidentally bill an inherited API key.
@@ -222,7 +225,7 @@ fn cli() -> Command {
     command
 }
 
-fn chat_command(model: &str, working_dir: &Path) -> Command {
+fn chat_command(model: &str, reasoning_effort: &str, working_dir: &Path) -> Command {
     let mut command = cli();
     command.current_dir(working_dir).args([
         "exec",
@@ -256,6 +259,12 @@ fn chat_command(model: &str, working_dir: &Path) -> Command {
     ]);
     if !model.trim().is_empty() {
         command.arg("--model").arg(model.trim());
+    }
+    if !reasoning_effort.is_empty() {
+        command.arg("-c").arg(format!(
+            "model_reasoning_effort={}",
+            json!(reasoning_effort)
+        ));
     }
     command
 }
@@ -566,7 +575,7 @@ mod tests {
 
     #[test]
     fn cli_always_enforces_readonly_permissions() {
-        let command = chat_command("model name; never a shell argument", Path::new("."));
+        let command = chat_command("model name; never a shell argument", "", Path::new("."));
         let args: Vec<_> = command
             .as_std()
             .get_args()
@@ -579,6 +588,16 @@ mod tests {
         assert!(args.iter().any(|arg| arg == "--ignore-user-config"));
         assert!(!args.iter().any(|arg| arg.contains("dangerously")));
         assert_eq!(args.last().unwrap(), "model name; never a shell argument");
+    }
+
+    #[test]
+    fn cli_receives_model_and_reasoning_as_separate_arguments() {
+        let command = chat_command("selected-model", "high", Path::new("."));
+        let args: Vec<_> = command.as_std().get_args().map(|arg| arg.to_string_lossy().to_string()).collect();
+        assert!(args.windows(2).any(|pair| pair == ["--model", "selected-model"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c", "model_reasoning_effort=\"high\""]));
+        let command = chat_command("", "", Path::new("."));
+        assert!(!command.as_std().get_args().any(|arg| arg.to_string_lossy().starts_with("model_reasoning_effort=")));
     }
 
     #[test]

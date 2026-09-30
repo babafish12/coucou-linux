@@ -15,10 +15,13 @@ pub struct Settings {
     pub screen: String,
     pub autostart: bool,
     pub hooks_installed: bool,
-    /// Chat model override. Empty on Linux to use the user's Codex configuration.
+    /// Chat model override. Empty on Linux to use the Codex catalog default.
     /// Defaulted explicitly so a settings.json written by an older build still loads.
     #[serde(default = "default_model")]
     pub model: String,
+    /// Empty selects the chosen model's default reasoning effort.
+    #[serde(default)]
+    pub reasoning_effort: String,
 }
 
 fn default_model() -> String {
@@ -60,6 +63,7 @@ impl Default for Settings {
             autostart: false,
             hooks_installed: false,
             model: default_model(),
+            reasoning_effort: String::new(),
         }
     }
 }
@@ -129,4 +133,26 @@ pub fn save(settings: &Settings) -> std::io::Result<()> {
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     std::fs::write(settings_path(), json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_preferences_keep_their_values_and_gain_default_reasoning() {
+        let mut saved = serde_json::to_value(Settings::default()).unwrap();
+        saved["model"] = serde_json::json!("saved-model");
+        saved["soundVolume"] = serde_json::json!(0.37);
+        saved.as_object_mut().unwrap().remove("reasoningEffort");
+        let loaded: Settings = serde_json::from_value(saved).unwrap();
+        assert_eq!(loaded.model, "saved-model");
+        assert_eq!(loaded.sound_volume, 0.37);
+        assert_eq!(loaded.reasoning_effort, "");
+        let mut updated = loaded;
+        updated.reasoning_effort = "high".into();
+        let roundtrip: Settings = serde_json::from_slice(&serde_json::to_vec(&updated).unwrap()).unwrap();
+        assert_eq!(roundtrip.reasoning_effort, "high");
+        assert_eq!(roundtrip.sound_volume, 0.37);
+    }
 }

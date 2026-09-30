@@ -5,6 +5,8 @@ mod claude;
 #[cfg(target_os = "linux")]
 mod codex;
 #[cfg(target_os = "linux")]
+mod codex_models;
+#[cfg(target_os = "linux")]
 mod codex_monitor;
 #[cfg(target_os = "linux")]
 mod autostart_linux;
@@ -272,6 +274,35 @@ async fn codex_status() -> codex::AccountStatus {
     codex::account_status().await
 }
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn codex_models(chat: State<'_, Chat>, refresh: bool) -> Result<Vec<codex_models::Model>, String> {
+    chat.models.list(refresh).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn codex_set_preferences(
+    app: AppHandle,
+    shared: State<'_, Shared>,
+    chat: State<'_, Chat>,
+    model: String,
+    reasoning_effort: String,
+) -> Result<Settings, String> {
+    chat.models.resolve(&model, &reasoning_effort).await?;
+    let updated = {
+        let mut current = shared.settings.lock().unwrap();
+        let mut updated = current.clone();
+        updated.model = model;
+        updated.reasoning_effort = reasoning_effort;
+        settings::save(&updated).map_err(|e| format!("Cannot save Codex preferences: {e}"))?;
+        *current = updated.clone();
+        updated
+    };
+    let _ = app.emit("settings-changed", &updated);
+    Ok(updated)
+}
+
 /// Returns the diff the user has to look at before anything is written.
 #[cfg(windows)]
 #[tauri::command]
@@ -334,11 +365,11 @@ async fn chat_send(
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
-    let model = shared.settings.lock().unwrap().model.clone();
+    let preferences = shared.settings.lock().unwrap().clone();
     #[cfg(windows)]
-    { claude::send(&chat, &model, query, context).await }
+    { claude::send(&chat, &preferences.model, query, context).await }
     #[cfg(target_os = "linux")]
-    { codex::send(&chat, &model, query, context).await }
+    { codex::send(&chat, &preferences.model, &preferences.reasoning_effort, query, context).await }
 }
 
 #[tauri::command]
@@ -509,6 +540,10 @@ pub fn run() {
             log_line,
             #[cfg(target_os = "linux")]
             codex_status,
+            #[cfg(target_os = "linux")]
+            codex_models,
+            #[cfg(target_os = "linux")]
+            codex_set_preferences,
             #[cfg(target_os = "linux")]
             codex_monitor_ready,
             chat_send,

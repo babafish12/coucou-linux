@@ -62,6 +62,8 @@ For paths, configuration, and more setup details, see the
   recently active session is shown.
 - **Chat with your Codex account:** ask questions from the island using the
   locally installed CLI and its saved login.
+- **Model and reasoning selectors:** choose from the installed Codex catalog,
+  with supported reasoning levels and defaults for each model.
 - **File context:** drop UTF-8 text or code files up to 200 KB, or supported images
   up to 10 MB, then ask questions about them. Original files are not modified.
 - **A window that fits the island:** the native window follows the visible
@@ -88,8 +90,10 @@ Open settings from the system tray or run:
 ```
 
 Settings include sounds, startup, display selection, optional integrations, and
-the Codex model. Leave Model blank to use the CLI default. Quit from the system
-tray menu.
+Codex model and reasoning dropdowns. Choose **Codex default** and **Model default**
+to follow the catalog's defaults, or select explicit values. Choices apply to
+the next chat reply. **Refresh models** reloads the catalog after an account or
+CLI change. Quit from the system tray menu.
 
 ### Current limits
 

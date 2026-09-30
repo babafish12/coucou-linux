@@ -45,7 +45,8 @@ system tray menu. Hover the top centre of the main display to reveal Mochi.
 - **Chat:** runs `codex exec --json` with your saved account. No Anthropic key or
   separate OpenAI API key is required. Turns use read-only sandboxing, disabled
   shell tools/integrations/hooks, and ephemeral execution. User configuration is
-  not loaded for these chat processes; leaving Model blank uses the CLI default.
+  not loaded for these chat processes. Model and reasoning choices come from
+  Coucou's settings, with defaults supplied by the Codex model catalog.
   This chat answers questions; it does not perform agent actions on your files.
 - **Attachments:** UTF-8 text/code up to 200 KB and supported images up to 10 MB.
   PDF and other binary formats report an unsupported-format error. Files are
@@ -59,6 +60,32 @@ The CLI integration follows the official
 Optional service integrations stay disabled initially. Their credentials use the
 Linux Secret Service (for example GNOME Keyring or KeePassXC), never a plaintext
 fallback. Codex manages its own authentication; Coucou does not read its tokens.
+
+## Model and reasoning settings
+
+Open **Settings → Codex** to choose a model and its reasoning level. Coucou loads
+the catalog from the installed CLI through `codex app-server` and `model/list`.
+The short-lived helper uses local standard input/output and starts no chat.
+Model names, available reasoning levels, and defaults are read from the catalog
+instead of a fixed list. See the official [app-server documentation](https://learn.chatgpt.com/docs/app-server#models).
+
+- **Codex default** follows the catalog's recommended model.
+- **Model default** follows that model's recommended reasoning effort.
+- Switching models retains the selected effort when supported, otherwise resets
+  it to Model default and shows a message.
+- **Refresh models** reloads the list. Missing models or invalid saved selections
+  are shown as unavailable and must be changed; chat does not silently substitute
+  a different model.
+
+Preferences persist in Coucou's `settings.json`. The chosen model and effort are
+validated and passed to each chat turn using `--model` and
+`-c 'model_reasoning_effort="…"'`. They affect the next Coucou reply, including in
+an existing chat, without changing Codex settings or other Codex sessions.
+A catalog entry does not guarantee that a particular request will be allowed by
+your account; request errors are shown in the chat.
+
+For the feasibility of reading and replying to existing Telegram chats, see
+[Telegram connector](TELEGRAM.md). That connector is not implemented yet.
 
 ## Linux window support
 
