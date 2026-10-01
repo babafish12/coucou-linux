@@ -31,7 +31,9 @@ want Coucou to start when you sign in. If a release build already exists, use
 
 Use **Coucou** in your applications menu or run `coucou`. Start `coucou --settings`
 to open settings, including when Coucou is already running. Quit through its
-system tray menu. Hover the top centre of the main display to reveal Mochi.
+system tray menu. Mochi stays visible as a compact island when idle; click it to
+open. Auto-close returns to the compact island. **Pause** in the tray menu can
+still hide it explicitly.
 
 ## Codex behavior
 

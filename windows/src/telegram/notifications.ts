@@ -12,6 +12,9 @@ type NotificationIsland = Pick<Island, "showTelegramNotification" | "setView">;
 
 /** TDLib supplies fresh notification events; unread totals are not notifications. */
 export function processTelegramNotifications(island: NotificationIsland, notifications: readonly TelegramNotification[]) {
+  const previous = TelegramNotifications.current;
+  const ready = inlineTelegramReady();
+  let changed = false;
   let latest: TelegramNotification | undefined;
   for (const notification of notifications) {
     if (seen.has(notification.id)) continue;
@@ -21,14 +24,17 @@ export function processTelegramNotifications(island: NotificationIsland, notific
   // The backend retains at most eight notifications for a minute.
   while (seen.size > 128) seen.delete(seen.values().next().value!);
 
-  if (!inlineTelegramReady()) latest = undefined;
-  if (!inlineTelegramReady() || !notifications.some((item) => item.id === TelegramNotifications.current?.id)) {
+  if (!ready) latest = undefined;
+  if (!ready || !notifications.some((item) => item.id === TelegramNotifications.current?.id)) {
     TelegramNotifications.current = null;
   }
-  if (latest && inlineTelegramReady()) {
+  if (latest && ready) {
     TelegramNotifications.current = latest;
     const task = State.tasks.find((item) => item.id === "integration_telegram");
-    if (task) task.pillBadge = "finished";
+    if (task && task.pillBadge !== "finished") {
+      task.pillBadge = "finished";
+      changed = true;
+    }
     if (State.mode === "expanded" && State.view === "telegram" && InlineTelegram.selected?.id === latest.chat.id) {
       void refreshInlineHistory();
     }
@@ -42,11 +48,13 @@ export function processTelegramNotifications(island: NotificationIsland, notific
   }
   if (!TelegramNotifications.current && State.mode === "expanded" && State.view === "telegram-notification") {
     island.setView("overview");
+    changed = true;
   }
-  State.notify();
+  if (changed || previous !== TelegramNotifications.current) State.notify();
 }
 
 export function dismissTelegramNotification() {
+  if (!TelegramNotifications.current) return;
   TelegramNotifications.current = null;
   State.notify();
 }

@@ -40,7 +40,8 @@ async function setup(t) {
   State.focusId = "integration_claude";
   State.mode = "hidden";
   State.view = "overview";
-  const calls = { show: [], views: [], history: [] };
+  const calls = { show: [], views: [], history: [], notifications: 0 };
+  t.after(State.subscribe(() => { calls.notifications++; }));
   const island = {
     showTelegramNotification() { calls.show.push(TelegramNotifications.current); },
     setView(view) { calls.views.push(view); State.view = view; },
@@ -56,6 +57,19 @@ async function setup(t) {
   };
 }
 
+test("unchanged empty notification polls do not wake the hidden island", async (t) => {
+  for (const enabled of [false, true]) {
+    await t.test(enabled ? "ready" : "disabled", async (t) => {
+      const app = await setup(t);
+      if (!enabled) app.State.settings.activeIntegrations = [];
+      for (let poll = 0; poll < 30; poll++) app.process([]);
+      assert.equal(app.calls.notifications, 0);
+      assert.deepEqual(app.calls.show, []);
+      assert.deepEqual(app.calls.views, []);
+    });
+  }
+});
+
 test("a notification batch surfaces only its newest incoming message without changing chat selection", async (t) => {
   const app = await setup(t);
   const first = notification("1");
@@ -70,21 +84,28 @@ test("a notification batch surfaces only its newest incoming message without cha
   assert.equal(app.State.focusId, "integration_claude");
   assert.equal(app.InlineTelegram.selected, alice);
   assert.equal(app.InlineTelegram.drafts.get(alice.id), "My unfinished reply");
+  assert.equal(app.calls.notifications, 1);
 });
 
 test("polling an existing notification and dismissing it do not replay the alert", async (t) => {
   const app = await setup(t);
   const first = notification("1");
   app.process([first]);
-  app.process([first]);
+  assert.equal(app.calls.notifications, 1);
+  for (let poll = 0; poll < 30; poll++) app.process([structuredClone(first)]);
   assert.equal(app.calls.show.length, 1);
+  assert.equal(app.calls.notifications, 1);
+  app.dismissTelegramNotification();
+  assert.equal(app.calls.notifications, 2);
   app.dismissTelegramNotification();
   app.process([first]);
   assert.equal(app.TelegramNotifications.current, null);
   assert.equal(app.calls.show.length, 1);
+  assert.equal(app.calls.notifications, 2);
   const second = notification("2", bob);
   app.process([first, second]);
   assert.deepEqual(app.calls.show, [first, second]);
+  assert.equal(app.calls.notifications, 3);
 });
 
 test("outgoing messages never trigger an incoming-message preview", async (t) => {
@@ -93,6 +114,7 @@ test("outgoing messages never trigger an incoming-message preview", async (t) =>
   assert.equal(app.TelegramNotifications.current, null);
   assert.deepEqual(app.calls.show, []);
   assert.equal(app.State.tasks[1].pillBadge, null);
+  assert.equal(app.calls.notifications, 0);
 });
 
 test("expanded interaction views retain their content and expose the new notification for explicit opening", async (t) => {
@@ -219,6 +241,20 @@ test("expired notifications clear the preview and return to Home", async (t) => 
   app.process([]);
   assert.equal(app.TelegramNotifications.current, null);
   assert.deepEqual(app.calls.views, ["overview"]);
+  assert.equal(app.calls.notifications, 2);
+  app.process([]);
+  assert.equal(app.calls.notifications, 2);
+});
+
+test("an empty notification view still notifies when returning to Home", async (t) => {
+  const app = await setup(t);
+  app.State.mode = "expanded";
+  app.State.view = "telegram-notification";
+  app.process([]);
+  assert.deepEqual(app.calls.views, ["overview"]);
+  assert.equal(app.calls.notifications, 1);
+  app.process([]);
+  assert.equal(app.calls.notifications, 1);
 });
 
 test("notification expiration does not navigate away from an active conversation", async (t) => {
@@ -230,4 +266,5 @@ test("notification expiration does not navigate away from an active conversation
   assert.equal(app.TelegramNotifications.current, null);
   assert.deepEqual(app.calls.views, []);
   assert.equal(app.State.view, "telegram");
+  assert.equal(app.calls.notifications, 2);
 });

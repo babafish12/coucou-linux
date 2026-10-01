@@ -48,7 +48,6 @@ then this is what an unsigned installer looks like on Windows, and you can alway
 
 | What you do | What happens |
 |---|---|
-| Move the mouse to the very top-centre of the screen | Mochi peeks out |
 | Click the small island | It opens |
 | Click Mochi | It gets annoyed. Three times in a row and it goes dizzy |
 | Rest the pointer on Mochi for two seconds | Hearts |
@@ -59,6 +58,8 @@ then this is what an unsigned installer looks like on Windows, and you can alway
 Everything else happens on its own: a Claude Code permission request opens the
 island with **Deny / Allow**, a finished session shows what it did, and
 your integrations sit in the coloured pills next to Mochi.
+When idle, the compact island stays visible. Auto-close returns to that compact
+view; **Pause** in the tray menu can still hide it explicitly.
 
 ## Claude Code
 
@@ -147,8 +148,8 @@ problems. It stays on your machine.
 
 ## What's different from the Mac version
 
-- No notch, so the island lives at the top centre of the screen and retracts into
-  the top edge instead of hiding in a notch.
+- No notch, so the island lives at the top centre of the screen and stays compact
+  when idle.
 - Permission approval works from **any** terminal; the Mac build only listens to
   VS Code sessions.
 - Not in this version: sending a file by email, dragging Mochi onto a window to

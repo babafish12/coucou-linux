@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coucou island performance preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <aside id="performance-controls">
+      <h1>Island performance preview</h1>
+      <p>Local fixtures only. Keep this tab visible. Each sample waits for both mini-bot groups to render, prepares Compact for at least 0.5 seconds, settles the selected view for at least 1 second, then measures 3 seconds.</p>
+      <div class="performance-actions">
+        <label>Scenario <select id="performance-scenario">
+          <option value="overview">Idle Home · four integration pills</option>
+          <option value="overview-searching">Searching Home · continuous animation</option>
+          <option value="compact">Compact · four mini bots</option>
+          <option value="prompt">Codex prompt</option>
+          <option value="telegram">Telegram conversation</option>
+          <option value="notification">Telegram notification</option>
+          <option value="hidden">Hidden island</option>
+        </select></label>
+        <button id="performance-measure">Measure 3 seconds</button>
+        <button id="performance-all">Run all · about 32 seconds</button>
+      </div>
+      <output id="performance-status" aria-live="polite">Ready</output>
+      <p>App RAF/s counts island animation frames, not display refresh rate. Callback time measures JavaScript only, excluding browser layout, GPU and OS CPU usage. Sleeping views may correctly report zero frames. Use Searching Home for a continuous-animation comparison between builds.</p>
+      <p>A separate browser RAF probe runs before each sample. Slow delivery produces a timing warning even when the browser reports this tab as visible. Zero app frames in idle or hidden views alone does not trigger a warning.</p>
+      <div class="performance-table"><table>
+        <thead><tr><th>Scenario</th><th>App RAF/s</th><th>Interval p95</th><th>Callback total</th><th>Canvas clears</th><th>beginPath</th><th>new Path2D</th></tr></thead>
+        <tbody id="performance-results"></tbody>
+      </table></div>
+      <details><summary>Full results · JSON</summary><pre id="performance-json">[]</pre></details>
+    </aside>
+    <script type="module" src="./performance-preview.ts"></script>
+  </body>
+</html>

@@ -202,6 +202,7 @@ export class BotEngine {
   private tweens = new Map<PropKey, Tween>();
   private locks = new Set<PropKey>();
   private particles: Particle[] = [];
+  private cachedBody: { rx: number; ry: number; R: number; morph: number; path: Path2D } | null = null;
 
   lookX = 0;
   lookY = 0;
@@ -219,6 +220,8 @@ export class BotEngine {
 
   /** Fired when three slaps land inside 1.7 s (→ dizzy + confused view). */
   onDizzy: (() => void) | null = null;
+  /** Wakes the owner when an input or delayed effect changes the drawing. */
+  onNeedsFrame: (() => void) | null = null;
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -258,6 +261,7 @@ export class BotEngine {
       default:
         if (prev !== "idle" || next !== "idle") this.blink();
     }
+    this.onNeedsFrame?.();
   }
 
   setBadge(b: Badge | null) {
@@ -270,6 +274,7 @@ export class BotEngine {
       if (tok !== this.badgeToken) return;
       this.badge = b;
       if (b) this.anim("badgeS", [[1, 280, Ease.back]]);
+      else this.onNeedsFrame?.();
     }, 100);
   }
 
@@ -289,7 +294,11 @@ export class BotEngine {
     setTimeout(() => {
       this.slotHTarget = 0;
       this.isChewing = true;
-      setTimeout(() => { this.isChewing = false; }, 800);
+      this.onNeedsFrame?.();
+      setTimeout(() => {
+        this.isChewing = false;
+        this.onNeedsFrame?.();
+      }, 800);
     }, 460);
     this.anim("sy", [[0.78, 80, Ease.out], [1.18, 130, Ease.out], [1, 220, Ease.back]]);
     this.anim("sx", [[1.28, 80, Ease.out], [0.92, 130, Ease.out], [1, 220, Ease.back]]);
@@ -349,6 +358,7 @@ export class BotEngine {
       if (this.greetToken !== tok) return;
       this.eyeOverride = "happy";
       this.eyeOverrideUntil = now() + 0.3;
+      this.onNeedsFrame?.();
     }, 1750);
   }
 
@@ -364,6 +374,7 @@ export class BotEngine {
     this.permanentEmote = emote;
     if (emote === "wink") {
       this.miniNextBehavior = now() + 0.8 + Math.random() * 1.7;
+      this.onNeedsFrame?.();
       return;
     }
     this.permanentEye = emote ? EMOTE_EYE[emote] : null;
@@ -375,6 +386,7 @@ export class BotEngine {
       this.eyeOverrideUntil = 0;
     }
     this.miniNextBehavior = now() + 0.8 + Math.random() * 1.7;
+    this.onNeedsFrame?.();
   }
 
   triggerEmote(emote: BotEmoteName, duration = 1.8) {
@@ -422,6 +434,7 @@ export class BotEngine {
         setTimeout(() => Sound.play("annoyed"), 60);
         break;
     }
+    this.onNeedsFrame?.();
   }
 
   emit(type: Particle["type"], count: number) {
@@ -439,6 +452,7 @@ export class BotEngine {
         size: 0.15 + Math.random() * 0.08,
       });
     }
+    if (count > 0) this.onNeedsFrame?.();
   }
 
   animateMorph(target: number, durationMs?: number) {
@@ -450,15 +464,35 @@ export class BotEngine {
     this.tweens.delete("morph");
     this.locks.delete("morph");
     this.morph = 0;
+    this.onNeedsFrame?.();
+  }
+
+  /** Next discrete change, in performance.now() milliseconds; no idle RAF needed. */
+  get nextWakeAt(): number | null {
+    const n = now();
+    let next = this.state !== "sleeping" && this.state !== "dizzy"
+      ? this.nextBlink : Number.POSITIVE_INFINITY;
+    if (this.eyeOverride && Number.isFinite(this.eyeOverrideUntil)) {
+      next = Math.min(next, this.eyeOverrideUntil);
+    }
+    if (this.waveStart > n && this.waveStart < this.waveUntil) {
+      next = Math.min(next, this.waveStart);
+    }
+    return Number.isFinite(next) ? Math.max(n, next) * 1000 : null;
   }
 
   /** True while anything is still moving — lets the island stop its RAF loop. */
   get busy(): boolean {
+    const n = now();
+    const eye = this.eyeShape;
     return (
       this.tweens.size > 0 ||
       this.particles.length > 0 ||
       this.cfg.bounces || this.cfg.scans || this.cfg.breathes || this.cfg.zz || this.cfg.sweat ||
       this.isMini ||
+      (this.badge?.kind === "dots" && this.badgeS > 0.01 && this.morph < 0.25) ||
+      eye === "spiral" || eye === "star" || this.state === "dizzy" ||
+      (this.waveStart > 0 && n >= this.waveStart && n < this.waveUntil) ||
       Math.abs(this.tgYaw - this.yaw) > 0.002 ||
       Math.abs(this.tgPitch - this.pitch) > 0.002 ||
       Math.abs(this.tgTilt - this.tilt) > 0.002 ||
@@ -479,6 +513,7 @@ export class BotEngine {
       prop, keys, index: 0, from: this[prop], startMs: performance.now(), onComplete,
     });
     this.locks.add(prop);
+    this.onNeedsFrame?.();
   }
 
   // ── Update ──────────────────────────────────────────────────────────────────
@@ -535,7 +570,7 @@ export class BotEngine {
     this.tgPitch = tp;
     this.tgTilt = this.cfg.tilt;
 
-    if (n > this.waveStart && n < this.waveUntil) {
+    if (n >= this.waveStart && this.waveStart > 0 && n < this.waveUntil) {
       const wt = n - this.waveStart;
       this.tgTilt = -0.06 + Math.sin(2 * Math.PI * 1.2 * wt) * 0.07;
     }
@@ -568,7 +603,7 @@ export class BotEngine {
 
     this.col = mix3(this.col, this.colT, 1 - Math.pow(0.002, dt));
 
-    if (n > this.nextBlink) {
+    if (n >= this.nextBlink) {
       if (this.state !== "sleeping" && this.state !== "dizzy") {
         this.blink();
         if (Math.random() < 0.22) setTimeout(() => this.blink(), 230);
@@ -576,7 +611,7 @@ export class BotEngine {
       this.nextBlink = n + 2.2 + Math.random() * 3.2;
     }
 
-    if (this.eyeOverride && n > this.eyeOverrideUntil) {
+    if (this.eyeOverride && n >= this.eyeOverrideUntil) {
       this.eyeOverride = this.permanentEye;
       if (this.permanentEye) this.eyeOverrideUntil = Number.POSITIVE_INFINITY;
     }
@@ -683,6 +718,10 @@ export class BotEngine {
   }
 
   private bodyPath(rx: number, ry: number, R: number): Path2D {
+    const cached = this.cachedBody;
+    if (cached && cached.rx === rx && cached.ry === ry && cached.R === R && cached.morph === this.morph) {
+      return cached.path;
+    }
     const n = 72;
     const expN = 2.0 / 2.7;
     const tw = R * 1.0;
@@ -707,6 +746,7 @@ export class BotEngine {
       else p.lineTo(px, py);
     }
     p.closePath();
+    this.cachedBody = { rx, ry, R, morph: m, path: p };
     return p;
   }
 
@@ -746,13 +786,16 @@ export class BotEngine {
     x.fill(body);
   }
 
-  private drawEyes(x: CanvasRenderingContext2D, body: Path2D, R: number, rx: number, ry: number) {
-    let shape: EyeShape = this.eyeOverride ?? this.cfg.eye;
+  private get eyeShape(): EyeShape {
     if (this.morph > 0.5) {
-      if (this.isChewing) shape = "happy";
-      else if (this.slotHTarget > 0.05 || this.slotH > 0.1) shape = "cup";
+      if (this.isChewing) return "happy";
+      if (this.slotHTarget > 0.05 || this.slotH > 0.1) return "cup";
     }
+    return this.eyeOverride ?? this.cfg.eye;
+  }
 
+  private drawEyes(x: CanvasRenderingContext2D, body: Path2D, R: number, rx: number, ry: number) {
+    const shape = this.eyeShape;
     x.save();
     x.clip(body);
     const ink = this.isMini ? MINI_INK : INK;

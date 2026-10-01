@@ -170,6 +170,8 @@ After installing the dependencies above:
 cd windows
 npm ci
 npm run build
+node scripts/test-island-performance.mjs
+node scripts/test-telegram-inline.mjs
 cargo test --workspace
 npm run tauri -- dev
 ```
@@ -184,6 +186,13 @@ npm run tauri -- build --no-bundle
 events, session monitoring, chat responses, attachments, and window input
 regions. Window geometry and clicks reaching background applications also need
 verification on a real desktop.
+
+The island tests use controlled clocks to check rendering, idle wakeups and
+auto-close behavior. With `npm run dev`, open
+`http://127.0.0.1:1420/dev/performance-preview.html` for local render measurements,
+or `/dev/telegram-preview.html` for chat and notification fixtures. These previews
+use no account and send no messages. Frame callback timings measure JavaScript
+work, not native WebKit/compositor CPU or GPU time.
 
 Send Linux improvements through
 [pull requests](https://github.com/babafish12/coucou-linux/pulls). For window

@@ -13,7 +13,7 @@ import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
-import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
+import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots, type MiniBotGroup } from "../mochi/minibots";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
@@ -24,6 +24,9 @@ import { TelegramNotifications } from "../telegram/notifications";
 const BOT_OVERHANG = 40;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
 const HIT_MARGIN = 14;
+/** Longest outgoing fade: compact grid 250ms, content 200ms, views 160ms. */
+const FADE_MS = 250;
+type RenderGroup = IslandViewName | "compact";
 
 /** The three views the drop sequence owns; leaving them stops the engine. */
 const UPLOAD_VIEWS: ReadonlySet<IslandViewName> = new Set(["upload", "uploading", "choose"]);
@@ -66,6 +69,9 @@ export class Island {
   private lastFrame = 0;
   private dirty = true;
   private canvasPx = 0;
+  private wakeTimer: number | null = null;
+  private renderGroup: RenderGroup | null = null;
+  private renderUntil = new Map<RenderGroup, number>();
 
   // Rust starts the window at full size so the launch greeting has room.
   private collapsed = false;
@@ -74,7 +80,6 @@ export class Island {
   private wasInIsland = false;
   /** Last shape handed to Rust for the click-through test. */
   private pushedRect = { x: -1, y: -1, w: -1, h: -1 };
-  private homeCollapseAt: number | null = null;
 
   // Bot hover → love (IslandWindowController.botHoverIn)
   private botHovering = false;
@@ -96,8 +101,10 @@ export class Island {
     this.wireFsm();
     this.wireInput();
     this.engine.onDizzy = () => this.handleDizzy();
+    this.engine.onNeedsFrame = () => this.ensureRunning();
     this.greeting.onComplete = () => this.fsm.greetComplete();
     State.subscribe(() => {
+      this.syncLifecycle();
       this.dirty = true;
       this.ensureRunning();
     });
@@ -229,6 +236,7 @@ export class Island {
 
   private wireFsm() {
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
+    this.fsm.onDeadlineChanged = () => this.ensureRunning();
     this.fsm.onTransition = (from, to) => {
       switch (to) {
         case "hidden":
@@ -298,7 +306,6 @@ export class Island {
     if (State.mode !== "expanded") this.setMode("expanded");
     else this.animateGeometry(false);
     State.lastActivity = performance.now();
-    this.homeCollapseAt = null;
     State.notify();
   }
 
@@ -345,7 +352,6 @@ export class Island {
     // forceHome cancels timers even if the previous notification is still open.
     if (!this.wasInIsland) {
       this.fsm.mouseLeft();
-      this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
     }
   }
 
@@ -615,13 +621,9 @@ export class Island {
     if (inIsland && !this.wasInIsland) {
       if (this.fsm.state === "coucou") this.greeting.hover();
       this.fsm.mouseEntered();
-      this.homeCollapseAt = null;
     }
     if (!inIsland && this.wasInIsland) {
       this.fsm.mouseLeft();
-      if (this.fsm.state === "home" && !State.isPinned) {
-        this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
-      }
     }
     this.wasInIsland = inIsland;
 
@@ -698,7 +700,16 @@ export class Island {
 
   // ── Frame loop ──────────────────────────────────────────────────────────────
 
+  private get settling(): boolean {
+    return this.width.animating || this.height.animating || this.radius.animating;
+  }
+
   ensureRunning() {
+    if (this.wakeTimer != null) {
+      window.clearTimeout(this.wakeTimer);
+      this.wakeTimer = null;
+    }
+    if (State.mode === "hidden" && !this.settling) return;
     if (this.running) return;
     this.running = true;
     this.lastFrame = performance.now();
@@ -725,6 +736,8 @@ export class Island {
     this.botSize.step(dt);
 
     const greetingActive = State.mode === "expanded" && State.view === "greeting";
+    const uploadActive = this.uploadActive;
+    const mainVisible = State.mode !== "hidden" && !greetingActive && !uploadActive;
     if (greetingActive) {
       const gctx = this.greetingCanvas.getContext("2d");
       if (gctx) {
@@ -732,43 +745,89 @@ export class Island {
         gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         this.greeting.draw(gctx);
       }
-    } else {
-      // Kept running even while the drop canvas is up, so the island's own Mochi
-      // is already in the right place the moment the canvas fades out.
+    } else if (mainVisible) {
       this.drawBot(dt);
+    } else if (uploadActive) {
+      // Keep the returning figure ready without drawing its covered canvas.
+      this.updateBot(dt);
     }
 
-    const uploadActive = this.uploadActive;
     if (uploadActive) this.uploadCanvas.draw(UploadSeq.frame(), nowMs / 1000);
     this.uploadCanvas.el.classList.toggle("on", uploadActive);
     this.viewsEl.classList.toggle("hidden-by-upload", uploadActive);
 
-    tickMiniBots(dt);
-    this.views.get(State.view)?.tick?.(nowMs);
+    this.expireRenderGroups(nowMs);
+    const groups = new Set<MiniBotGroup>();
+    if (this.renderUntil.has("compact")) groups.add("compact");
+    if (this.renderUntil.has("overview")) groups.add("overview");
+    const minisBusy = tickMiniBots(dt, groups);
+    let viewBusy = false;
+    for (const group of this.renderUntil.keys()) {
+      if (group === "compact") continue;
+      const view = this.views.get(group);
+      view?.tick?.(nowMs);
+      viewBusy ||= view?.animating ?? false;
+    }
     if (UploadSeq.isActive) this.stepSequence();
     this.updateCountdown(nowMs);
 
-    // Nothing is drawn while the island is hidden, so nothing may keep the loop
-    // alive either. This used to read `... || this.engine.busy || State.mode !==
-    // "hidden"`, and engine.busy is permanently true for any state with a
-    // looping animation — breathing, ratelimit sweat, sleeping z's, the search
-    // sweep — so a hidden island went on burning frames in exactly the states it
-    // spends most of its life in. Geometry still has to finish retracting.
-    const settling =
-      this.width.animating || this.height.animating || this.radius.animating;
     const busy = State.mode === "hidden"
-      ? settling
-      : settling ||
+      ? this.settling
+      : this.settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || UploadSeq.isActive;
+        greetingActive || (mainVisible && this.engine.busy) || this.uploadActive ||
+        minisBusy || viewBusy || this.countdownAnimating(nowMs);
 
     if (busy) {
       requestAnimationFrame(this.frame);
     } else {
       this.running = false;
       Sound.idle();
+      this.scheduleWake(nowMs, mainVisible);
     }
   };
+
+  /** One timer covers idle blinks, outgoing fades and the countdown's start. */
+  private scheduleWake(nowMs: number, mainVisible: boolean) {
+    if (State.mode === "hidden") return;
+    const deadlines = [...this.renderUntil.values()].filter(Number.isFinite);
+    const engineWake = mainVisible ? this.engine.nextWakeAt : null;
+    if (engineWake != null) deadlines.push(engineWake);
+    const collapse = this.fsm.homeCollapseDeadline;
+    if (State.mode === "expanded" && !this.fsm.pinned && collapse != null) {
+      const start = collapse - Math.min(10, this.fsm.homeToPetitDelay * 0.6) * 1000;
+      if (start > nowMs) deadlines.push(start);
+    }
+    if (deadlines.length === 0) return;
+    this.wakeTimer = window.setTimeout(() => {
+      this.wakeTimer = null;
+      this.ensureRunning();
+    }, Math.max(1, Math.min(...deadlines) - nowMs));
+  }
+
+  private setRenderGroup(group: RenderGroup | null) {
+    if (group === this.renderGroup) return;
+    if (this.renderGroup != null) this.renderUntil.set(this.renderGroup, performance.now() + FADE_MS);
+    this.renderGroup = group;
+    if (group != null) this.renderUntil.set(group, Infinity);
+    this.syncRenderClasses();
+  }
+
+  private expireRenderGroups(nowMs: number) {
+    let changed = false;
+    for (const [group, until] of this.renderUntil) {
+      if (nowMs >= until || (State.mode === "hidden" && !this.settling)) {
+        this.renderUntil.delete(group);
+        changed = true;
+      }
+    }
+    if (changed) this.syncRenderClasses();
+    this.islandEl.classList.toggle("rendering", State.mode !== "hidden" || this.settling);
+  }
+
+  private syncRenderClasses() {
+    for (const [name, view] of this.views) view.el.classList.toggle("rendering", this.renderUntil.has(name));
+  }
 
   private updateBotTargets() {
     const p = botPosition(State.mode, State.view, this.height.value, State.uploadProgress);
@@ -814,6 +873,13 @@ export class Island {
     const ctx = this.botCanvas.getContext("2d");
     if (!ctx) return;
 
+    this.updateBot(dt);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, hCss);
+    this.engine.draw(ctx, w, hCss);
+  }
+
+  private updateBot(dt: number) {
     const focus = State.focusTask;
     this.engine.bodyColor = State.view === "telegram-notification" && State.mode === "expanded"
       ? hexToRGB("#2481B5") : focus?.isIntegration ? hexToRGB(focus.color) : null;
@@ -830,9 +896,6 @@ export class Island {
       }
     }
     this.engine.update(dt);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, hCss);
-    this.engine.draw(ctx, w, hCss);
   }
 
   /** BotCanvasView.lookX / lookY — tanh of the distance to the bot. */
@@ -846,30 +909,43 @@ export class Island {
     return -Math.tanh((State.mouse.y - this.botCy.value) / 200);
   }
 
+  private countdownAnimating(nowMs: number): boolean {
+    const deadline = this.fsm.homeCollapseDeadline;
+    return State.mode === "expanded" && !this.fsm.pinned && deadline != null &&
+      nowMs < deadline && deadline - nowMs <= Math.min(10, this.fsm.homeToPetitDelay * 0.6) * 1000;
+  }
+
   private updateCountdown(nowMs: number) {
-    if (State.mode !== "expanded" || State.isPinned || this.homeCollapseAt == null) {
+    const deadline = this.fsm.homeCollapseDeadline;
+    if (!this.countdownAnimating(nowMs) || deadline == null) {
       this.countdown.style.width = "0px";
       return;
     }
-    const autoClose = State.settings.autoCloseInterval;
+    const autoClose = this.fsm.homeToPetitDelay;
     const windowS = Math.min(10, autoClose * 0.6);
-    const remaining = (this.homeCollapseAt - nowMs) / 1000;
+    const remaining = (deadline - nowMs) / 1000;
     this.countdown.style.width =
       remaining < windowS ? `${Math.max(0, clamp(remaining / windowS, 0, 1) * 160)}px` : "0px";
   }
 
   // ── DOM sync ────────────────────────────────────────────────────────────────
 
-  private syncDom() {
-    const expanded = State.mode === "expanded";
-    const greetingActive = expanded && State.view === "greeting";
-    const telegramKeepsOpen = expanded && State.view === "telegram";
+  /** Lifecycle changes must run even when hidden DOM work is deferred. */
+  private syncLifecycle() {
+    const telegramKeepsOpen = State.mode === "expanded" && State.view === "telegram";
     if (telegramKeepsOpen !== this.telegramKeepsOpen) {
       this.telegramKeepsOpen = telegramKeepsOpen;
       this.fsm.pinned = State.isPinned || telegramKeepsOpen;
       if (telegramKeepsOpen) this.fsm.cancelTimers();
       else if (!this.wasInIsland) this.fsm.mouseLeft();
     }
+  }
+
+  private syncDom() {
+    const expanded = State.mode === "expanded";
+    const greetingActive = expanded && State.view === "greeting";
+    this.setRenderGroup(State.mode === "compact" ? "compact"
+      : expanded && !greetingActive && !this.uploadActive ? State.view : null);
 
     this.contentEl.style.opacity = expanded && !greetingActive ? "1" : "0";
     this.contentEl.style.pointerEvents = expanded && !greetingActive ? "auto" : "none";
@@ -909,7 +985,7 @@ export class Island {
         this.miniGrid.dataset.key = key;
         this.miniGrid.replaceChildren();
         for (const t of others) {
-          this.miniGrid.append(createMiniBot(t, 13));
+          this.miniGrid.append(createMiniBot(t, 13, "compact"));
         }
         pruneMiniBots();
       }

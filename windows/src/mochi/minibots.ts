@@ -1,14 +1,17 @@
 // Mini Mochis (pills + compact grid) — port of MiniBotCanvasView.
-// Each canvas owns a BotEngine; the island's frame loop ticks every live one.
+// Each canvas owns a BotEngine; the island ticks only the visible groups.
 
 import { BotEngine, hexToRGB } from "./engine";
 import type { AgentTask } from "../core/state";
+
+export type MiniBotGroup = "compact" | "overview";
 
 interface MiniBot {
   canvas: HTMLCanvasElement;
   engine: BotEngine;
   cssSize: number;
   taskId: string;
+  group: MiniBotGroup;
 }
 
 const live = new Map<HTMLCanvasElement, MiniBot>();
@@ -22,7 +25,7 @@ const live = new Map<HTMLCanvasElement, MiniBot>();
  * `.frame(width: 22)`. Sizing the canvas itself to `bodySize` would shrink the
  * whole drawing to 60 %, which is what used to happen.
  */
-export function createMiniBot(task: AgentTask, bodySize: number): HTMLElement {
+export function createMiniBot(task: AgentTask, bodySize: number, group: MiniBotGroup): HTMLElement {
   const slot = document.createElement("span");
   slot.className = "mini";
   slot.style.width = `${bodySize}px`;
@@ -48,7 +51,7 @@ export function createMiniBot(task: AgentTask, bodySize: number): HTMLElement {
     engine.eyeOverrideUntil = Number.POSITIVE_INFINITY;
   }
 
-  live.set(canvas, { canvas, engine, cssSize: engineSize, taskId: task.id });
+  live.set(canvas, { canvas, engine, cssSize: engineSize, taskId: task.id, group });
   return slot;
 }
 
@@ -72,16 +75,20 @@ export function syncMiniBotStates(tasks: AgentTask[]) {
   }
 }
 
-export function tickMiniBots(dt: number) {
+export function tickMiniBots(dt: number, groups: ReadonlySet<MiniBotGroup>): boolean {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
+  let busy = false;
   for (const mb of live.values()) {
+    if (!groups.has(mb.group) || !mb.canvas.isConnected) continue;
     const ctx = mb.canvas.getContext("2d");
     if (!ctx) continue;
     mb.engine.update(dt);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, mb.cssSize, mb.cssSize);
     mb.engine.draw(ctx, mb.cssSize, mb.cssSize);
+    busy = mb.engine.busy || busy;
   }
+  return busy;
 }
 
 export const miniBotCount = () => live.size;
