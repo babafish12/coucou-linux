@@ -3,8 +3,8 @@
 **A Linux desktop companion for local Codex sessions, based on [Coucou](https://github.com/Louis-CFM/coucou).**
 
 Mochi lives at the top of your screen, shows Codex activity, and lets you chat or
-ask questions about files using your existing Codex login. No Claude account,
-Anthropic key, or separate OpenAI API key is required for the Linux integration.
+ask questions about files using your existing Codex login. No separate OpenAI API
+key is required.
 
 ![Linux](https://img.shields.io/badge/Linux-Arch%20%2B%20Hyprland-1793D1?logo=archlinux&logoColor=white)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
@@ -172,15 +172,14 @@ use `--copy-build` to return to the installed copy.
 
 ## Development and contributing
 
-The Linux and Windows Tauri application lives in `windows/` for historical
-reasons. It uses Rust for the native backend and TypeScript/Canvas for the UI.
-Linux selects the Codex backend; Windows retains its Claude integration. The
-original macOS Swift project lives in `NotchBuddy/`.
+The Linux application lives in `linux/`. It uses Tauri 2 with Rust for the native
+backend and TypeScript/Canvas for the UI. The supported desktop target is
+Linux with X11/XWayland.
 
 After installing the dependencies above:
 
 ```sh
-cd windows
+cd linux
 npm ci
 npm run build
 node scripts/test-island-performance.mjs
@@ -215,7 +214,8 @@ Send Linux improvements through
 fixes, include the compositor, X11/Wayland session type, display scaling, and
 steps to reproduce. Keep changes focused and include the relevant build or test
 results.
-The inherited [contribution guide](CONTRIBUTING.md) covers the macOS project.
+See the [contribution guide](CONTRIBUTING.md), [architecture](docs/SPEC.md), and
+[integration guide](docs/INTEGRATIONS.md) for development details.
 
 ## Original project and credits
 

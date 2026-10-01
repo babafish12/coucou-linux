@@ -153,9 +153,9 @@ class LauncherTests(unittest.TestCase):
         (repo / "scripts").mkdir(parents=True)
         for name in ("install-linux.sh", "coucou-launcher.py"):
             shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
-        build = repo / "windows/target/release/coucou"
+        build = repo / "linux/target/release/coucou"
         first = self.binary(build, b"first")
-        icon = repo / "windows/src-tauri/icons/128x128.png"
+        icon = repo / "linux/src-tauri/icons/128x128.png"
         icon.parent.mkdir(parents=True)
         icon.write_bytes(b"test icon")
         home = self.root / "home ' spaces $"

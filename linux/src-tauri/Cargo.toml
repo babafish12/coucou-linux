@@ -1,0 +1,30 @@
+[package]
+name = "coucou"
+description = "Coucou — Mochi lives at the top of your screen"
+authors = ["Louis Raille"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "coucou_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["net", "io-util", "sync", "time", "rt", "process", "macros"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Use the same GTK version as Tauri for native input regions and focus hints.
+gtk = "0.18"
+gdkx11 = "0.18"
+x11-dl = "2.21"
+libloading = "0.7"
+base64 = "0.22"
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

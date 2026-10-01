@@ -1,32 +1,66 @@
-# Contributing to Coucou
+# Contributing to coucou-linux
 
-Thanks for wanting to help Mochi grow up! 🫶
+This fork develops the Linux desktop app with local Codex and optional service
+integrations. Start with [Linux setup](docs/LINUX.md) for system dependencies.
 
 ## Getting started
 
-```bash
-brew install xcodegen
-cd NotchBuddy && xcodegen && open NotchBuddy.xcodeproj
+```sh
+cd linux
+npm ci
+npm run tauri -- dev
 ```
 
-Never edit `NotchBuddy.xcodeproj` by hand: change `project.yml` and run `xcodegen`.
+The native backend is in `linux/src-tauri/src/`; the TypeScript/Canvas frontend
+is in `linux/src/`. Sounds are in `linux/public/sounds/` and are copied into the
+frontend build by Vite. See [architecture](docs/SPEC.md) and
+[integrations](docs/INTEGRATIONS.md) for the main entry points.
 
-## Good first contributions
+## Changes and checks
 
-- A new integration (a poller + a pill + a detail card). Look at `StripePoller.swift` for a compact example.
-- A new emote or sound for Mochi.
-- Bug fixes — please describe how to reproduce.
+Keep changes focused and follow the existing Rust and TypeScript style. Avoid
+new dependencies unless necessary. From `linux/`, run the checks relevant to
+your change:
 
-## Rules of the house
+```sh
+npm run build
+node scripts/test-island-performance.mjs
+node scripts/test-codex-activity.mjs
+node scripts/test-telegram-inline.mjs
+cargo test --workspace --locked
+npm run tauri -- build --no-bundle
+```
 
-- Swift 6, SwiftUI + AppKit, **no third-party dependencies** unless there's really no other way.
-- Secrets go in the Keychain, never on disk or in git.
-- No telemetry, no network calls except to services the user configured.
-- Never block Claude Code: if the app doesn't answer, the hook must exit right away.
-- Never write `~/.claude/settings.json` without a backup and the user's confirmation.
-- Keep it light: 0 % CPU when the island is hidden.
+Installer and launcher changes also need the following check from the repository
+root:
+
+```sh
+python3 scripts/test-coucou-launcher.py
+```
+
+Frontend previews under `linux/dev/` exercise UI fixtures without accounts or
+real messages. Window geometry, focus, tray behavior and click-through require a
+real X11/XWayland desktop. Include the compositor, session type, display scaling
+and reproduction steps when reporting a window bug.
+
+## Privacy and behavior
+
+- Store integration credentials in Linux Secret Service; never in preferences,
+  logs, frontend state or Git.
+- Codex handles its own login. Do not read or copy its authentication tokens.
+- No telemetry. Make network requests only for features and services the user
+  configured or explicitly invoked.
+- Keep monitored Codex sessions read-only. Approvals for the built-in chat and
+  sending Telegram messages require an explicit user action.
+- Preserve user settings and create dated backups when replacing installation
+  files. Do not edit Codex configuration.
+- Stop animation work when hidden and avoid unnecessary background polling.
+  Check performance with the existing tests and a real desktop.
 
 ## Pull requests
 
-- One topic per PR, with a short GIF or screenshot for anything visual.
-- Build must pass with no new warnings.
+Describe the concrete problem, resulting behavior and checks performed. Include
+a screenshot or short recording for visual changes. Preserve attribution to
+[Louis Raillé and the original Coucou project](https://github.com/Louis-CFM/coucou).
+The [MIT code license](LICENSE) and [separate asset terms](LICENSE-ASSETS.md) both
+apply; the artwork is not covered by the code license.

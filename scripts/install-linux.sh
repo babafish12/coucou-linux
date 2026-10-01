@@ -24,9 +24,9 @@ if (( ! skip_build )); then
     echo 'Missing GTK3, WebKit2GTK 4.1 or D-Bus development files. See docs/LINUX.md.' >&2
     exit 1
   }
-  (cd "$repo_dir/windows" && npm ci && npm run tauri -- build --no-bundle)
+  (cd "$repo_dir/linux" && npm ci && npm run tauri -- build --no-bundle)
 fi
-binary="$repo_dir/windows/target/release/coucou"
+binary="$repo_dir/linux/target/release/coucou"
 [[ -x "$binary" ]] || { echo "Build missing: $binary" >&2; exit 1; }
 python3 - "$repo_dir" "$autostart" "$install_mode" <<'PY'
 import datetime
@@ -58,7 +58,7 @@ def write_file(path, content, mode=0o644):
     temporary.chmod(mode)
     temporary.replace(path)
 
-local_build = repo / 'windows/target/release/coucou'
+local_build = repo / 'linux/target/release/coucou'
 launcher_source = repo / 'scripts/coucou-launcher.py'
 launcher_api = runpy.run_path(str(launcher_source))
 install_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +95,7 @@ write_file(install_dir / 'launcher.py', launcher_source.read_bytes())
 launcher_script = '#!/bin/sh\n# Coucou managed launcher v1\n'
 launcher_script += 'exec ' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(install_dir / 'launcher.py')) + ' "$@"\n'
 write_file(launcher, launcher_script.encode(), 0o755)
-write_file(icon, (repo / 'windows/src-tauri/icons/128x128.png').read_bytes())
+write_file(icon, (repo / 'linux/src-tauri/icons/128x128.png').read_bytes())
 # Desktop entries unescape string values before parsing Exec quoting.
 def desktop_exec_path(path):
     text = str(path)
@@ -117,7 +117,7 @@ if sys.argv[2] == '1':
     values = json.loads(prefs.read_text()) if prefs.exists() else {
         'soundEnabled': True, 'soundVolume': 0.12, 'autoCloseInterval': 15,
         'absenceInterval': 180, 'activeIntegrations': [], 'screen': 'primary',
-        'hooksInstalled': False, 'model': '',
+        'model': '',
     }
     values['autostart'] = True
     write_file(prefs, (json.dumps(values, indent=2) + '\n').encode(), 0o600)

@@ -1,8 +1,7 @@
 # Linux + Codex
 
-The Tauri application in `windows/` now also builds on Linux. The existing Mochi
-character, sounds and island UI are shared. Windows keeps its Claude integration;
-Linux uses the locally installed Codex CLI and its existing login.
+The Tauri application in `linux/` uses the locally installed Codex CLI and its
+existing login. Mochi, sounds and the island UI retain the original Coucou design.
 
 ## Install for your user
 
@@ -44,7 +43,7 @@ building:
 ```
 
 The **Coucou** menu entry and `coucou` launcher then prefer this checkout's
-`windows/target/release/coucou`. Later release builds are picked up on the next
+`linux/target/release/coucou`. Later release builds are picked up on the next
 launch without reinstalling. If that file is absent, the launcher uses the last
 installed copy. Opening Coucou again replaces a verified older running build;
 the same build simply activates the existing instance. This preference survives
@@ -167,14 +166,14 @@ the middle widget group is empty; adjacent island controls remain clickable.
 | Preferences | `~/.config/coucou/settings.json` |
 | Local log and inbox | `~/.local/share/coucou/` |
 
-XDG_CONFIG_HOME and XDG_DATA_HOME are honored for preferences and data. Neither
-Claude's settings nor Codex's settings are changed. Turn off startup in Coucou's
+XDG_CONFIG_HOME and XDG_DATA_HOME are honored for preferences and data. Codex's
+settings are not changed. Turn off startup in Coucou's
 settings, or remove only its `Coucou.desktop` autostart entry to disable it.
 
 ## Development and checks
 
 ```sh
-cd windows
+cd linux
 npm ci
 npm run build
 node scripts/test-codex-activity.mjs
@@ -190,4 +189,4 @@ attachments, streaming, approvals, cancellation and window input regions.
 and streamed chat rendering. `/dev/chat-preview.html` in the Vite dev server
 provides local fixtures for streaming, approvals, failures and Stop without an
 account or real actions. A full native-window check still needs a real
-Linux desktop. The macOS Swift project is unchanged.
+Linux desktop.

@@ -10,8 +10,14 @@ labels: bug
 
 **How to reproduce**
 
-**macOS version**
+**Linux distribution and version**
 
-**Mac model**
+**Desktop/compositor and X11 or Wayland session**
+
+**Display scaling and monitor layout**
 
 **Coucou version**
+
+**Codex CLI version (for Codex issues)**
+
+**Relevant logs (remove tokens, credentials and private conversation content)**

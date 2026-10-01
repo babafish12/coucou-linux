@@ -136,7 +136,7 @@ exercise sign-in screens and composer behavior with fixture responses. A real
 account is still required to verify that account's login, history and delivery.
 
 For the inline controller's polling, chat-switch, draft and notification regressions, run
-`cd windows && node scripts/test-telegram-inline.mjs`. With Vite running, open
+`cd linux && node scripts/test-telegram-inline.mjs`. With Vite running, open
 `http://127.0.0.1:1420/dev/telegram-preview.html` to exercise the actual island
 with local fixture chats, including send failures and incoming notifications.
 This preview never connects
