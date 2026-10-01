@@ -7,6 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
 import type { TelegramNotification } from "../telegram/api";
+import type { ActivitySnapshot } from "../codex/activity";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -33,6 +34,8 @@ export interface BootInfo {
 export const Bridge = {
   boot: () => call<BootInfo>("boot"),
   codexMonitorReady: () => call<void>("codex_monitor_ready"),
+  codexActivity: () => callOrThrow<ActivitySnapshot>("codex_activity"),
+  focusCodex: (cwd?: string) => callOrThrow<void>("focus_codex_window", { cwd: cwd ?? null }),
   codexStatus: () => call<{ installed: boolean; loggedIn: boolean; message: string }>("codex_status"),
   codexModels: (refresh = false) => callOrThrow<CodexModel[]>("codex_models", { refresh }),
   codexSetPreferences: (model: string, reasoningEffort: string) =>

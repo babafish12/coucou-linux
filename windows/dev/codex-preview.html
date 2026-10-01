@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex activity island preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <aside id="preview-controls">
+      <b>Codex activity preview · local fixtures only</b>
+      <p>No session logs are read and no Codex window is opened. Try scrolling up before adding an update.</p>
+      <button id="preview-home">Home</button>
+      <button id="preview-detail">Open activity</button>
+      <button id="preview-update">Add public update</button>
+      <button id="preview-switch">Update other session</button>
+      <button id="preview-finished">Finish session</button>
+      <button id="preview-empty">Empty monitor</button>
+      <button id="preview-error">Monitor error</button>
+      <button id="preview-reset">Reset</button>
+      <label><input type="checkbox" id="preview-focus-error" /> Fail window focus</label>
+      <output id="preview-status" aria-live="polite"></output>
+    </aside>
+    <script type="module" src="./codex-preview.ts"></script>
+  </body>
+</html>

@@ -14,6 +14,8 @@ import { renderIntegrationCard, type IntegrationCardHooks } from "./integrations
 import { buildTelegram, buildTelegramNotification } from "./telegram";
 import { InlineTelegram, selectInlineChat } from "../telegram/inline";
 import { TelegramNotifications } from "../telegram/notifications";
+import { CodexActivity, codexActivityStatus, codexProjectName } from "../codex/activity";
+import { buildCodex } from "./codex";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -21,6 +23,7 @@ export interface ViewActions {
   collapse(): void;
   setFocus(id: string): void;
   openTerminal(): void;
+  focusCodex(cwd?: string): Promise<void>;
   /** The ↗ button: opens whatever the focused pill points at. */
   openTarget(): void;
   openUrl(url: string): void;
@@ -111,7 +114,7 @@ export function buildHeader(actions: ViewActions): ViewHost {
     el,
     sync() {
       const v = State.view;
-      tabHome.classList.toggle("on", v === "overview" || v === "empty" || v === "telegram" || v === "telegram-notification");
+      tabHome.classList.toggle("on", v === "overview" || v === "empty" || v === "codex" || v === "telegram" || v === "telegram-notification");
       const notification = TelegramNotifications.current;
       telegramAlert.hidden = !notification || v === "telegram-notification";
       telegramAlert.textContent = notification ? `Telegram · ${notification.chat.title}` : "";
@@ -199,7 +202,34 @@ function buildOverview(actions: ViewActions): ViewHost {
       const sessionActive =
         task?.id === "integration_claude" && (task.state !== "idle" || task.steps.length > 0);
 
-      if (task && sessionActive) {
+      const codex = task?.id === "integration_claude" && State.agentProvider === "codex";
+      if (codex) {
+        const session = CodexActivity.latest;
+        const entry = session?.entries.filter((entry) => entry.kind !== "status").at(-1) ?? CodexActivity.latestEntry;
+        const key = JSON.stringify([session, CodexActivity.loaded, CodexActivity.error]);
+        if (mode !== "card" || key !== cardKey) {
+          mode = "card";
+          cardKey = key;
+          const active = session?.state === "thinking" || session?.state === "working";
+          const summary = entry ? entry.kind === "tool" && entry.detail
+            ? `${entry.text}: ${entry.detail.split("\n")[0]}` : entry.text
+            : CodexActivity.error || (CodexActivity.loaded ? "No recent sessions" : "Loading activity…");
+          const project = session ? codexProjectName(session.cwd) : "Activity";
+          leftBody.replaceChildren(h("button", {
+            class: "codex-home", type: "button", "aria-label": "Open Codex activity",
+            onclick: () => {
+              if (session) CodexActivity.select(session.id);
+              actions.blip();
+              actions.setView("codex");
+            },
+          },
+          h("span", { class: "codex-home-head" }, dot(active ? "#34D399" : "#F5F6F8", 7),
+            h("b", { text: "Codex" }), h("span", { text: project || "Activity" })),
+          h("span", { class: "codex-home-task", text: session?.title || "Local sessions", title: session?.title || "" }),
+          h("span", { class: "codex-home-summary", text: summary, title: summary }),
+          h("span", { class: "codex-home-open", text: session ? `${codexActivityStatus(session.state)} · View activity ›` : "View activity ›" })));
+        }
+      } else if (task && sessionActive) {
         if (mode !== "ticker") {
           clear(leftBody);
           leftBody.append(tickerBody);
@@ -236,6 +266,8 @@ function buildOverview(actions: ViewActions): ViewHost {
       }
 
       jump.style.display = detailOpen ? "none" : "";
+      jump.title = codex ? "Focus Codex window" : "Open";
+      jump.setAttribute("aria-label", jump.title);
 
       const others = State.otherTasks.slice(0, 4);
       const pillKey = others.map((t) => `${t.id}:${t.pillBadge ?? ""}`).join("|");
@@ -523,6 +555,7 @@ export function buildViews(
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
   map.set("prompt", buildPrompt(onChatHeightChange));
+  map.set("codex", buildCodex(actions));
   map.set("telegram", buildTelegram(actions));
   map.set("telegram-notification", buildTelegramNotification(actions));
   map.set("upload", buildUpload());

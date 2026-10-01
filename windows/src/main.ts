@@ -7,6 +7,7 @@ import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
 import { registerHookHandlers } from "./island/hooks";
 import { registerIntegrationHandlers, refreshConfigured } from "./island/integrations";
+import { CodexActivity, type ActivitySnapshot } from "./codex/activity";
 
 async function main() {
   const root = document.getElementById("root");
@@ -62,10 +63,25 @@ async function main() {
   });
 
   await registerHookHandlers(island);
+  let activityReceived = false;
+  if (State.agentProvider === "codex") {
+    await onEvent<ActivitySnapshot>("codex-activity", (snapshot) => {
+      activityReceived = true;
+      CodexActivity.apply(snapshot);
+    });
+  }
   registerIntegrationHandlers(island);
 
   island.launch();
-  if (State.agentProvider === "codex") await Bridge.codexMonitorReady();
+  if (State.agentProvider === "codex") {
+    await Bridge.codexMonitorReady();
+    try {
+      const snapshot = await Bridge.codexActivity();
+      if (!activityReceived) CodexActivity.apply(snapshot);
+    } catch (error) {
+      if (!activityReceived) CodexActivity.setError(String(error));
+    }
+  }
 
   // In a plain browser there is no wake strip behind the cursor: make the whole
   // page wake the island so the visuals can be checked with `npm run dev`.

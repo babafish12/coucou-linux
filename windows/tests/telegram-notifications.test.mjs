@@ -118,7 +118,7 @@ test("outgoing messages never trigger an incoming-message preview", async (t) =>
 });
 
 test("expanded interaction views retain their content and expose the new notification for explicit opening", async (t) => {
-  for (const view of ["prompt", "telegram", "upload", "uploading", "choose", "approval", "question", "settings", "searching", "result"]) {
+  for (const view of ["prompt", "telegram", "codex", "upload", "uploading", "choose", "approval", "question", "settings", "searching", "result"]) {
     await t.test(view, async (t) => {
       const app = await setup(t);
       app.State.mode = "expanded";

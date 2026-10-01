@@ -53,9 +53,15 @@ copy. Startup entries created through settings also use the managed launcher.
 ## Codex behavior
 
 - **Activity:** watches recent local `CODEX_HOME/sessions` JSONL logs incrementally
-  (`~/.codex/sessions` by default). Shows active work, tool names and completion;
-  concurrent sessions are represented by the most recently active session.
-  Prompts, command arguments and tool outputs are not copied into the activity UI.
+  (`~/.codex/sessions` by default). The Home card shows the latest session; click
+  it for a scrollable activity view with session selection. Recent completed
+  sessions remain visible, alongside public progress messages, action summaries
+  and timestamps. A short user task labels each session. Tool details show
+  selected paths and summarized commands; raw tool outputs and internal
+  reasoning are excluded. This read-only view stays open while you inspect it.
+- **Window focus:** the Codex card's corner arrow and **Focus Codex** button
+  activate an existing Codex desktop window on Hyprland. If no matching
+  window is available, the activity view reports it.
 - **Approvals:** answer permissions and questions in Codex itself. Reading a log
   does not provide an approval channel, so Coucou never displays an Allow button
   for a monitored Codex session.
@@ -160,6 +166,7 @@ settings, or remove only its `Coucou.desktop` autostart entry to disable it.
 cd windows
 npm ci
 npm run build
+node scripts/test-codex-activity.mjs
 cargo test --workspace
 npm run tauri -- build --no-bundle
 npm run tauri -- dev

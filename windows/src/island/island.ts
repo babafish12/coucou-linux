@@ -20,6 +20,7 @@ import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../vie
 import { h } from "../views/dom";
 import { IslandStateMachine } from "./fsm";
 import { TelegramNotifications } from "../telegram/notifications";
+import { CodexActivity } from "../codex/activity";
 
 const BOT_OVERHANG = 40;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
@@ -75,7 +76,7 @@ export class Island {
 
   // Rust starts the window at full size so the launch greeting has room.
   private collapsed = false;
-  private telegramKeepsOpen = false;
+  private detailKeepsOpen = false;
   private collapseTimer: number | null = null;
   private wasInIsland = false;
   /** Last shape handed to Rust for the click-through test. */
@@ -122,9 +123,10 @@ export class Island {
         Sound.play("blip");
       },
       openTerminal: () => {
-        const cwd = State.focusTask?.sessionCwd ?? null;
-        void Bridge.openInVSCode(cwd);
+        if (State.agentProvider === "codex") void this.focusCodex();
+        else void Bridge.openInVSCode(State.focusTask?.sessionCwd ?? null);
       },
+      focusCodex: (cwd) => Bridge.focusCodex(cwd),
       // The ↗ button — same targets as openAgentTarget() on macOS.
       openTarget: () => {
         const task = State.focusTask;
@@ -137,7 +139,10 @@ export class Island {
           integration_notion: "https://notion.so",
           integration_calcom: "https://app.cal.com/bookings",
         };
-        if (task.id === "integration_claude") void Bridge.openInVSCode(task.sessionCwd ?? null);
+        if (task.id === "integration_claude") {
+          if (State.agentProvider === "codex") void this.focusCodex();
+          else void Bridge.openInVSCode(task.sessionCwd ?? null);
+        }
         else if (task.id === "integration_telegram") this.setView("telegram");
         else if (task.id === "integration_n8n") void Bridge.openN8n();
         else if (urls[task.id]) void Bridge.openUrl(urls[task.id]);
@@ -264,6 +269,15 @@ export class Island {
 
   launch() {
     this.fsm.launch();
+  }
+
+  private async focusCodex() {
+    try {
+      await Bridge.focusCodex(CodexActivity.latest?.cwd || State.focusTask?.sessionCwd || undefined);
+    } catch (error) {
+      CodexActivity.setError(String(error));
+      this.setView("codex");
+    }
   }
 
   // ── Mode / view ─────────────────────────────────────────────────────────────
@@ -932,11 +946,15 @@ export class Island {
 
   /** Lifecycle changes must run even when hidden DOM work is deferred. */
   private syncLifecycle() {
-    const telegramKeepsOpen = State.mode === "expanded" && State.view === "telegram";
-    if (telegramKeepsOpen !== this.telegramKeepsOpen) {
-      this.telegramKeepsOpen = telegramKeepsOpen;
-      this.fsm.pinned = State.isPinned || telegramKeepsOpen;
-      if (telegramKeepsOpen) this.fsm.cancelTimers();
+    const detailKeepsOpen = State.mode === "expanded" && (State.view === "telegram" || State.view === "codex");
+    const pinned = State.isPinned || detailKeepsOpen;
+    if (this.fsm.pinned !== pinned) {
+      this.fsm.pinned = pinned;
+      if (pinned) this.fsm.cancelTimers();
+    }
+    if (detailKeepsOpen !== this.detailKeepsOpen) {
+      this.detailKeepsOpen = detailKeepsOpen;
+      if (detailKeepsOpen) this.fsm.cancelTimers();
       else if (!this.wasInIsland) this.fsm.mouseLeft();
     }
   }

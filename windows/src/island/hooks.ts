@@ -149,7 +149,7 @@ function handleHook(island: Island, payload: HookPayload) {
   /** Alerts force the island open; work events only reveal the compact island. */
   const surface = (view: Parameters<Island["alert"]>[0], isAlert: boolean) => {
     if (State.mode === "expanded") {
-      if (isAlert) island.setView(view);
+      if (isAlert && State.view !== "codex") island.setView(view);
     } else if (isAlert) {
       island.alert(view);
     } else if (State.mode === "hidden") {

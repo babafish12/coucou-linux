@@ -57,9 +57,9 @@ For paths, configuration, and more setup details, see the
 
 ## Features
 
-- **Local Codex activity:** shows work, tool names, and completion from local
-  interactive CLI and desktop sessions. With concurrent sessions, the most
-  recently active session is shown.
+- **Local Codex activity:** open the Codex card to browse local sessions with
+  public progress messages, concrete tool actions, timestamps and completion.
+  The corner arrow focuses the Codex desktop window.
 - **Chat with your Codex account:** ask questions from the island using the
   locally installed CLI and its saved login.
 - **Model and reasoning selectors:** choose from the installed Codex catalog,
@@ -177,6 +177,7 @@ cd windows
 npm ci
 npm run build
 node scripts/test-island-performance.mjs
+node scripts/test-codex-activity.mjs
 node scripts/test-telegram-inline.mjs
 cargo test --workspace
 npm run tauri -- dev
@@ -196,7 +197,8 @@ verification on a real desktop.
 The island tests use controlled clocks to check rendering, idle wakeups and
 auto-close behavior. With `npm run dev`, open
 `http://127.0.0.1:1420/dev/performance-preview.html` for local render measurements,
-or `/dev/telegram-preview.html` for chat and notification fixtures. These previews
+or `/dev/telegram-preview.html` for chat and notification fixtures and
+`/dev/codex-preview.html` for Codex activity. These previews
 use no account and send no messages. Frame callback timings measure JavaScript
 work, not native WebKit/compositor CPU or GPU time.
 

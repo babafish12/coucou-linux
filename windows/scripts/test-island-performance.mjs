@@ -22,6 +22,7 @@ try {
         export { Sound } from "./src/core/sound";
         export { UploadSeq } from "./src/upload/sequence";
         export { TelegramNotifications } from "./src/telegram/notifications";
+        export { CodexActivity } from "./src/codex/activity";
       `,
       resolveDir: root,
       loader: "ts",
