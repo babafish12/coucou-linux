@@ -35,6 +35,21 @@ system tray menu. Mochi stays visible as a compact island when idle; click it to
 open. Auto-close returns to the compact island. **Pause** in the tray menu can
 still hide it explicitly.
 
+To make the application menu follow each new local release build, run once after
+building:
+
+```sh
+./scripts/install-linux.sh --skip-build --link-build
+```
+
+The **Coucou** menu entry and `coucou` launcher then prefer this checkout's
+`windows/target/release/coucou`. Later release builds are picked up on the next
+launch without reinstalling. If that file is absent, the launcher uses the last
+installed copy. Opening Coucou again replaces a verified older running build;
+the same build simply activates the existing instance. This preference survives
+later installer runs. Use `--copy-build` to return to using only the installed
+copy. Startup entries created through settings also use the managed launcher.
+
 ## Codex behavior
 
 - **Activity:** watches recent local `CODEX_HOME/sessions` JSONL logs incrementally

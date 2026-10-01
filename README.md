@@ -153,9 +153,15 @@ git pull --ff-only
 ./scripts/install-linux.sh
 ```
 
-Quit the running app through its tray menu and launch **Coucou** again to use the
-new build. Reinstalling without `--autostart` leaves an existing startup entry
+Launch **Coucou** again to use the new build. The launcher replaces a verified
+older running build automatically. Reinstalling without `--autostart` leaves an existing startup entry
 unchanged; disable startup in settings if you no longer want it.
+
+For local development, `./scripts/install-linux.sh --skip-build --link-build`
+makes the **Coucou** application entry follow this checkout's latest release
+build, with the installed copy as a fallback. Subsequent rebuilds only require
+opening Coucou from app search again. This choice survives later installer runs;
+use `--copy-build` to return to the installed copy.
 
 ## Development and contributing
 

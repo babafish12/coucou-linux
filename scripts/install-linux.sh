@@ -4,11 +4,15 @@ set -euo pipefail
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 skip_build=0
 autostart=0
+install_mode=preserve
 for arg in "$@"; do
   case "$arg" in
     --skip-build) skip_build=1 ;;
     --autostart) autostart=1 ;;
-    *) echo "Usage: $0 [--skip-build] [--autostart]" >&2; exit 2 ;;
+    --link-build) install_mode=link-build ;;
+    --copy-build) install_mode=copy-build ;;
+    -h|--help) echo "Usage: $0 [--skip-build] [--autostart] [--link-build|--copy-build]"; exit 0 ;;
+    *) echo "Usage: $0 [--skip-build] [--autostart] [--link-build|--copy-build]" >&2; exit 2 ;;
   esac
 done
 [[ "$(uname -s)" == Linux ]] || { echo 'This installer requires Linux.' >&2; exit 1; }
@@ -24,11 +28,13 @@ if (( ! skip_build )); then
 fi
 binary="$repo_dir/windows/target/release/coucou"
 [[ -x "$binary" ]] || { echo "Build missing: $binary" >&2; exit 1; }
-python3 - "$repo_dir" "$autostart" <<'PY'
+python3 - "$repo_dir" "$autostart" "$install_mode" <<'PY'
 import datetime
+import fcntl
 import json
 import os
 from pathlib import Path
+import runpy
 import shlex
 import shutil
 import sys
@@ -52,8 +58,43 @@ def write_file(path, content, mode=0o644):
     temporary.chmod(mode)
     temporary.replace(path)
 
-write_file(install_dir / 'coucou', (repo / 'windows/target/release/coucou').read_bytes(), 0o755)
-write_file(launcher, ('#!/bin/sh\nexec ' + shlex.quote(str(install_dir / 'coucou')) + ' "$@"\n').encode(), 0o755)
+local_build = repo / 'windows/target/release/coucou'
+launcher_source = repo / 'scripts/coucou-launcher.py'
+launcher_api = runpy.run_path(str(launcher_source))
+install_dir.mkdir(parents=True, exist_ok=True)
+lock_fd = os.open(install_dir / 'launcher.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+if not launcher_api['owned_regular'](os.fstat(lock_fd)):
+    raise RuntimeError('Unsafe Coucou launcher lock file.')
+fcntl.flock(lock_fd, fcntl.LOCK_EX)
+manifest_path = install_dir / 'launcher.json'
+manifest = launcher_api['load_config'](manifest_path) if manifest_path.exists() else {
+    'version': 1, 'mode': 'copy-build', 'buildPath': str(local_build),
+    'managedPaths': [], 'knownBuilds': [],
+}
+if sys.argv[3] != 'preserve':
+    manifest['mode'] = sys.argv[3]
+elif not manifest_path.exists() and launcher.exists():
+    # Migrate the previous --link-build shell launcher without losing its mode.
+    if shlex.quote(str(local_build)) in launcher.read_text():
+        manifest['mode'] = 'link-build'
+manifest['buildPath'] = str(local_build)
+for candidate in (install_dir / 'coucou', local_build):
+    canonical = str(candidate.resolve())
+    if canonical not in manifest['managedPaths']:
+        manifest['managedPaths'].append(canonical)
+    if candidate.exists():
+        with candidate.open('rb') as stream:
+            digest = launcher_api['fingerprint'](stream.fileno())
+        if digest not in manifest['knownBuilds']:
+            manifest['knownBuilds'].append(digest)
+# Record the installed predecessor before replacing it, including the first
+# migration from the shell launcher. An older running image can then be verified.
+write_file(manifest_path, (json.dumps(manifest, indent=2) + '\n').encode(), 0o600)
+write_file(install_dir / 'coucou', local_build.read_bytes(), 0o755)
+write_file(install_dir / 'launcher.py', launcher_source.read_bytes())
+launcher_script = '#!/bin/sh\n# Coucou managed launcher v1\n'
+launcher_script += 'exec ' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(install_dir / 'launcher.py')) + ' "$@"\n'
+write_file(launcher, launcher_script.encode(), 0o755)
 write_file(icon, (repo / 'windows/src-tauri/icons/128x128.png').read_bytes())
 # Desktop entries unescape string values before parsing Exec quoting.
 def desktop_exec_path(path):
@@ -82,6 +123,9 @@ if sys.argv[2] == '1':
     write_file(prefs, (json.dumps(values, indent=2) + '\n').encode(), 0o600)
 print(f'Installed: {launcher}')
 print(f'Applications menu: {desktop}')
+if manifest['mode'] == 'link-build':
+    print(f'Launcher follows local release builds: {local_build}')
+    print(f'Fallback if the local build is absent: {install_dir / "coucou"}')
 if sys.argv[2] == '1':
     print(f'Autostart: {config / "autostart/Coucou.desktop"}')
 print('Start with: coucou')
