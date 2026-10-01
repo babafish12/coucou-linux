@@ -822,6 +822,13 @@ input[type="range"]::-webkit-slider-thumb {
   user-select: text;
 }
 
+.reply-config {
+  margin: 2px 0 4px;
+  font-size: 10px;
+  color: var(--dim-2);
+  white-space: normal;
+}
+
 .typing {
   display: flex;
   gap: 4px;

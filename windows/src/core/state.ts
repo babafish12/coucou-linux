@@ -32,6 +32,8 @@ export interface ChatMessage {
   id: number;
   role: "user" | "assistant";
   content: string;
+  model?: string;
+  reasoningEffort?: string;
 }
 
 export type PromptContext =

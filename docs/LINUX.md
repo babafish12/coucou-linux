@@ -84,6 +84,13 @@ an existing chat, without changing Codex settings or other Codex sessions.
 A catalog entry does not guarantee that a particular request will be allowed by
 your account; request errors are shown in the chat.
 
+Each new chat reply displays **Requested: model · reasoning** using the resolved
+values passed by the backend to that turn's Codex process. Changing preferences
+does not relabel earlier replies. A model's generated answer to “Which model
+are you?” can be wrong; use the request label to inspect Coucou's selection.
+The CLI's JSON response does not independently confirm the provider's runtime
+model identity, so the label reports the request rather than making that claim.
+
 For the feasibility of reading and replying to existing Telegram chats, see
 [Telegram connector](TELEGRAM.md). That connector is not implemented yet.
 

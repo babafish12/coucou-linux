@@ -18,7 +18,18 @@ function bubble(message: ChatMessage): HTMLElement {
       h("div", { class: "bubble", text: message.content }),
     );
   }
-  return h("div", { class: "chat-row" }, h("div", { class: "reply", text: message.content }));
+  const metadata = message.model
+    ? h("div", {
+        class: "reply-config",
+        text: `Requested: ${message.model}${message.reasoningEffort ? ` · ${message.reasoningEffort} reasoning` : ""}`,
+        title: "Model and reasoning sent to Codex for this reply. Codex CLI does not report the provider's runtime model identity.",
+      })
+    : null;
+  return h(
+    "div",
+    { class: "chat-row" },
+    h("div", { class: "reply" }, metadata, h("div", { text: message.content })),
+  );
 }
 
 function typingDots(): HTMLElement {
@@ -80,7 +91,13 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
     try {
       const reply = await Bridge.chatSend(query, context);
       if (State.chatHistory !== history) return;
-      history.push({ id: nextId++, role: "assistant", content: reply.text });
+      history.push({
+        id: nextId++,
+        role: "assistant",
+        content: reply.text,
+        model: reply.model,
+        reasoningEffort: reply.reasoningEffort,
+      });
       State.stateOverride = null;
       Sound.play("finish");
     } catch (err) {

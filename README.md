@@ -63,7 +63,8 @@ For paths, configuration, and more setup details, see the
 - **Chat with your Codex account:** ask questions from the island using the
   locally installed CLI and its saved login.
 - **Model and reasoning selectors:** choose from the installed Codex catalog,
-  with supported reasoning levels and defaults for each model.
+  with supported reasoning levels and defaults for each model. Each reply
+  shows the model and reasoning requested for that turn.
 - **File context:** drop UTF-8 text or code files up to 200 KB, or supported images
   up to 10 MB, then ask questions about them. Original files are not modified.
 - **A window that fits the island:** the native window follows the visible
