@@ -61,7 +61,13 @@ For paths, configuration, and more setup details, see the
   interactive CLI and desktop sessions. With concurrent sessions, the most
   recently active session is shown.
 - **Chat with your Codex account:** ask questions from the island using the
-  locally installed CLI and its saved login.
+  locally installed CLI and its saved login. Responses stream as they arrive;
+  a warm, persistent connection avoids starting a process for every message.
+- **Local actions from chat:** run shell commands and edit files with Codex.
+  Requests for additional access show the proposed action in the chat, with
+  **Allow once** and **Deny** controls. **Stop** interrupts the current reply.
+- **Direct chat navigation:** **Open chat** on a completed session focuses that
+  exact conversation in Codex Desktop.
 - **Model and reasoning selectors:** choose from the installed Codex catalog,
   with supported reasoning levels and defaults for each model. Each reply
   shows the model and reasoning requested for that turn.
@@ -84,8 +90,8 @@ For paths, configuration, and more setup details, see the
 
 ## Use it
 
-Hover near the top centre of your main display to reveal the island, then click
-to open it. Start a local Codex session to see its activity, open chat to ask a
+Hover over the island at the top centre of your main display to open it directly.
+Start a local Codex session to see its activity, open chat to ask a
 question, or drop a supported file onto the island for context.
 
 Open settings from the system tray or run:
@@ -134,8 +140,9 @@ integrations can be shown alongside Codex.
 
 - Approvals and permission questions stay in Codex; the activity monitor cannot
   approve them from the island.
-- Built-in chat uses ephemeral, read-only Codex processes with shell tools
-  disabled. It answers questions and does not perform agent actions on files.
+- Built-in chat uses an ephemeral Codex app-server thread with shell and file
+  tools. Its writable workspace is Coucou's local chat folder; broader access
+  requires approval in chat. Browser and desktop GUI control are not integrated.
 - Cloud, remote, subagent, `codex exec`, and ephemeral sessions are not monitored.
   Monitoring reads local session logs, whose format may change with Codex updates.
 - PDF and other unsupported binary attachments report an error.
@@ -190,7 +197,8 @@ verification on a real desktop.
 The island tests use controlled clocks to check rendering, idle wakeups and
 auto-close behavior. With `npm run dev`, open
 `http://127.0.0.1:1420/dev/performance-preview.html` for local render measurements,
-or `/dev/telegram-preview.html` for chat and notification fixtures. These previews
+`/dev/chat-preview.html` for streaming, approval and Stop fixtures, or
+`/dev/telegram-preview.html` for Telegram chat and notification fixtures. These previews
 use no account and send no messages. Frame callback timings measure JavaScript
 work, not native WebKit/compositor CPU or GPU time.
 

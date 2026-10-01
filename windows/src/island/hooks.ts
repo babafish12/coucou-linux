@@ -117,13 +117,14 @@ function clearSession() {
   t.stepIndex = 0;
   t.name = State.agentAppLabel;
   t.pillBadge = null;
+  t.sessionId = null;
 }
 
 export async function registerHookHandlers(island: Island) {
   await onEvent<HookPayload>("hook", (payload) => handleHook(island, payload));
 }
 
-function handleHook(island: Island, payload: HookPayload) {
+export function handleHook(island: Island, payload: HookPayload) {
   if (State.paused) {
     // Silence here used to cost Claude Code nearly two minutes: the relay waited
     // for a decision from an island that had already decided not to look. Say so,
@@ -140,6 +141,10 @@ function handleHook(island: Island, payload: HookPayload) {
   if (State.agentProvider === "codex" && payload.session_id && payload.session_id !== currentSessionId) {
     clearSession();
     currentSessionId = payload.session_id;
+  }
+  if (State.agentProvider === "codex" && payload.session_id) {
+    const task = State.tasks.find((task) => task.id === CLAUDE_ID);
+    if (task) task.sessionId = payload.session_id;
   }
   const cwd = payload.cwd ?? "";
   const raw = lastPathComponent(cwd);

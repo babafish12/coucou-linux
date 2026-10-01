@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex chat preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <aside id="preview-controls">
+      <b>Codex chat preview · local fixtures only</b>
+      <p>No account, network requests, shell commands, or file changes. Type any message or select a scenario.</p>
+      <button data-scenario="stream">Stream reply</button>
+      <button data-scenario="approval">Request approval</button>
+      <button data-scenario="failure">Fail after partial reply</button>
+      <button data-scenario="slow">Slow reply · try Stop</button>
+      <button id="preview-reset">Reset chat</button>
+      <output id="preview-status" aria-live="polite"></output>
+    </aside>
+    <script type="module" src="./chat-preview.ts"></script>
+  </body>
+</html>

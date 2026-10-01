@@ -67,6 +67,7 @@ class Element {
   }
   dispatch(name, event = {}) { for (const callback of this.listeners.get(name) ?? []) callback(event); }
   focus() { this.focused = true; }
+  select() { this.selected = true; }
   animate() {}
   getContext() { return { canvas: this, setTransform() {}, clearRect() {} }; }
 }

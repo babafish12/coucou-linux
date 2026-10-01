@@ -2,7 +2,7 @@
 // page is opened in a plain browser, so the island can be iterated on with
 // `npm run dev` alone.
 
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
@@ -60,6 +60,9 @@ export const Bridge = {
   /** "Open terminal" → opens the folder in VS Code when `code` is on PATH. */
   openInVSCode: (path: string | null) => call<boolean>("open_in_vscode", { path }),
 
+  /** Focus the exact monitored chat in Codex Desktop. */
+  openCodexSession: (sessionId: string) => callOrThrow<void>("open_codex_session", { sessionId }),
+
   quit: () => call<void>("quit_app"),
 
   openSettingsWindow: () => call<void>("open_settings_window"),
@@ -86,9 +89,16 @@ export const Bridge = {
   approvalDecline: (requestId: string) => call<void>("approval_decline", { requestId }),
 
   // ── Chat, files, secrets ──────────────────────────────────────────────────
-  /** One chat turn. The API key and any file bytes never leave Rust. */
-  chatSend: (query: string, context: ChatContext | null) =>
-    callOrThrow<{ text: string; model?: string; reasoningEffort?: string }>("chat_send", { query, context }),
+  chatWarmup: () => call<void>("chat_warmup"),
+  /** Stream this turn over a dedicated channel, registered before invocation. */
+  chatSend: (query: string, context: ChatContext | null, requestId: string, onProgress: (event: ChatEvent) => void) => {
+    const progress = new Channel<ChatEvent>();
+    progress.onmessage = onProgress;
+    return callOrThrow<{ text: string; model?: string; reasoningEffort?: string }>("chat_send", { query, context, requestId, progress });
+  },
+  chatApprove: (requestId: string, approvalId: string, allow: boolean) =>
+    callOrThrow<void>("chat_approve", { requestId, approvalId, allow }),
+  chatCancel: (requestId: string) => callOrThrow<void>("chat_cancel", { requestId }),
   chatReset: () => call<void>("chat_reset"),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
@@ -141,6 +151,18 @@ export interface CodexModel {
 export type ChatContext =
   | { kind: "file"; name: string; path: string }
   | { kind: "window"; appName: string; title: string; url?: string };
+
+export interface ChatEvent {
+  requestId: string;
+  kind: "delta" | "message" | "status" | "approval" | "approvalResolved";
+  text?: string;
+  itemId?: string;
+  model?: string;
+  reasoningEffort?: string;
+  approvalId?: string;
+  command?: string;
+  cwd?: string;
+}
 
 export interface DroppedFile {
   name: string;

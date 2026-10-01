@@ -15,6 +15,7 @@ try {
       contents: `
         export { Island } from "./src/island/island";
         export { IslandStateMachine } from "./src/island/fsm";
+        export { handleHook } from "./src/island/hooks";
         export { BotEngine } from "./src/mochi/engine";
         export * from "./src/mochi/minibots";
         export { State } from "./src/core/state";

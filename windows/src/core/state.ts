@@ -19,6 +19,7 @@ export interface AgentTask {
   miniEye?: EyeShape | null;
   pillBadge?: PillBadge | null;
   sessionCwd?: string | null;
+  sessionId?: string | null;
 }
 
 export interface ApprovalInfo {

@@ -20,7 +20,7 @@ export interface ViewActions {
   showTelegramNotification(): void;
   collapse(): void;
   setFocus(id: string): void;
-  openTerminal(): void;
+  openTerminal(): Promise<void>;
   /** The ↗ button: opens whatever the focused pill points at. */
   openTarget(): void;
   openUrl(url: string): void;
@@ -56,7 +56,7 @@ function btn(
   kind: "primary" | "secondary",
   onClick: () => void,
   kbd?: string,
-): HTMLElement {
+): HTMLButtonElement {
   return h(
     "button",
     { class: `btn ${kind}`, onclick: onClick },
@@ -387,18 +387,44 @@ function buildError(actions: ViewActions): ViewHost {
 
 function buildFinished(actions: ViewActions): ViewHost {
   const who = h("div");
-  const title = h("div", { class: "title" });
+  const title = h("div", { class: "title", role: "status" });
+  let error = "";
+  const renderTitle = () => {
+    title.textContent = error || State.focusTask?.steps.at(-1) || "Session finished";
+    title.title = title.textContent;
+    title.style.color = error ? "#F4505E" : "";
+  };
+  const open = btn("Open terminal", "primary", async () => {
+    const openingSessionId = State.focusTask?.sessionId;
+    open.disabled = true;
+    error = "";
+    renderTitle();
+    try {
+      await actions.openTerminal();
+    } catch (reason) {
+      if (State.focusTask?.sessionId === openingSessionId) {
+        error = String(reason instanceof Error ? reason.message : reason);
+        renderTitle();
+      }
+    } finally {
+      open.disabled = false;
+    }
+  });
   const row = h("div", { class: "actions" },
-    btn("Open terminal", "primary", () => actions.openTerminal()),
+    open,
     btn("OK", "secondary", () => actions.collapse()),
   );
   const el = h("div", { class: "view" }, card("green", stack(116, 16, who, title, row)));
+  let sessionId: string | null | undefined;
   return {
     el,
     sync() {
       clear(who);
       who.append(agentWho(State.focusTask, `${State.agentLabel} finished`));
-      title.textContent = State.focusTask?.steps.at(-1) ?? "Session finished";
+      open.textContent = State.agentProvider === "codex" ? "Open chat" : "Open terminal";
+      if (sessionId !== State.focusTask?.sessionId) error = "";
+      sessionId = State.focusTask?.sessionId;
+      renderTitle();
     },
   };
 }
@@ -522,7 +548,7 @@ export function buildViews(
   map.set("confused", buildConfused());
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
-  map.set("prompt", buildPrompt(onChatHeightChange));
+  map.set("prompt", buildPrompt(onChatHeightChange, () => actions.setView("prompt")));
   map.set("telegram", buildTelegram(actions));
   map.set("telegram-notification", buildTelegramNotification(actions));
   map.set("upload", buildUpload());

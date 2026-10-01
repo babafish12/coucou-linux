@@ -9,6 +9,8 @@ mod codex_models;
 #[cfg(target_os = "linux")]
 mod codex_monitor;
 #[cfg(target_os = "linux")]
+mod codex_navigation;
+#[cfg(target_os = "linux")]
 mod autostart_linux;
 mod encoding;
 mod files;
@@ -213,6 +215,12 @@ fn open_in_vscode(path: Option<String>) -> bool {
     Command::new("xdg-open").arg(path).spawn().is_ok()
 }
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn open_codex_session(session_id: String) -> Result<(), String> {
+    codex_navigation::open_session(&session_id).await
+}
+
 /// Our own `where`: walks %PATH% against %PATHEXT%, no shell involved.
 /// Rust quotes arguments correctly for `.cmd`/`.bat` targets since 1.77, so
 /// spawning `code.cmd` directly is safe.
@@ -368,19 +376,67 @@ fn approval_decline(app: AppHandle, request_id: String) {
 
 // ── Chat, files and secrets ───────────────────────────────────────────────────
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn chat_warmup(shared: State<'_, Shared>, chat: State<'_, Chat>) -> Result<(), String> {
+    let preferences = shared.settings.lock().unwrap().clone();
+    codex::warmup(&chat, &preferences.model, &preferences.reasoning_effort).await
+}
+
 /// One chat turn. The API key and any file bytes stay on the Rust side.
+#[cfg(windows)]
 #[tauri::command]
 async fn chat_send(
     shared: State<'_, Shared>,
     chat: State<'_, Chat>,
     query: String,
     context: Option<ChatContext>,
+    progress: tauri::ipc::Channel<serde_json::Value>,
+) -> Result<ChatReply, String> {
+    // Windows still returns a complete Claude reply; close its unused stream.
+    drop(progress);
+    let preferences = shared.settings.lock().unwrap().clone();
+    claude::send(&chat, &preferences.model, query, context).await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn chat_send(
+    shared: State<'_, Shared>,
+    chat: State<'_, Chat>,
+    query: String,
+    context: Option<ChatContext>,
+    request_id: String,
+    progress: tauri::ipc::Channel<codex::ChatEvent>,
 ) -> Result<ChatReply, String> {
     let preferences = shared.settings.lock().unwrap().clone();
-    #[cfg(windows)]
-    { claude::send(&chat, &preferences.model, query, context).await }
-    #[cfg(target_os = "linux")]
-    { codex::send(&chat, &preferences.model, &preferences.reasoning_effort, query, context).await }
+    codex::send(
+        &chat,
+        &preferences.model,
+        &preferences.reasoning_effort,
+        query,
+        context,
+        request_id,
+        move |event| { let _ = progress.send(event); },
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn chat_approve(
+    chat: State<'_, Chat>,
+    request_id: String,
+    approval_id: String,
+    allow: bool,
+) -> Result<(), String> {
+    chat.approve(&request_id, &approval_id, allow)
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn chat_cancel(chat: State<'_, Chat>, request_id: String) -> Result<(), String> {
+    chat.cancel(&request_id)
 }
 
 #[tauri::command]
@@ -569,6 +625,8 @@ pub fn run() {
             reposition,
             open_url,
             open_in_vscode,
+            #[cfg(target_os = "linux")]
+            open_codex_session,
             quit_app,
             hooks_status,
             #[cfg(windows)]
@@ -591,6 +649,12 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             codex_monitor_ready,
             chat_send,
+            #[cfg(target_os = "linux")]
+            chat_warmup,
+            #[cfg(target_os = "linux")]
+            chat_approve,
+            #[cfg(target_os = "linux")]
+            chat_cancel,
             chat_reset,
             ingest_file,
             secret_present,

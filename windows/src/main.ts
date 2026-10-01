@@ -20,6 +20,7 @@ async function main() {
     State.agentProvider = boot.agentProvider;
   }
   const island = new Island(root);
+  if (State.agentProvider === "codex") void Bridge.chatWarmup();
   island.applySettings();
   State.loadIntegrationTasks();
 

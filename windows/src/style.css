@@ -836,6 +836,53 @@ input[type="range"]::-webkit-slider-thumb {
   white-space: normal;
 }
 
+.reply-config:empty, .chat-status:empty { display: none; }
+
+.chat-status {
+  flex: 0 0 auto;
+  max-height: 44px;
+  overflow: auto;
+  font: 400 11px var(--font);
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.chat-stop, .chat-approval button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  font: 500 11px var(--font);
+  cursor: pointer;
+}
+
+.chat-approval {
+  flex: 0 0 auto;
+  padding: 8px;
+  border: 1px solid rgba(247, 179, 43, 0.4);
+  border-radius: 10px;
+  background: rgba(247, 179, 43, 0.08);
+  font: 400 11px var(--font);
+  color: var(--ink-2);
+}
+
+.chat-approval-details {
+  max-height: 100px;
+  margin: 6px 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.chat-approval-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.chat-approval .chat-allow { background: rgba(247, 179, 43, 0.18); }
+.chat-stop:disabled, .chat-approval button:disabled { opacity: 0.5; cursor: default; }
+.chat-stop[hidden], .chat-approval[hidden], .send-btn[hidden] { display: none; }
+
 .typing {
   display: flex;
   gap: 4px;

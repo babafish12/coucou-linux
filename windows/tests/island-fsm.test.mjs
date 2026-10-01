@@ -120,6 +120,24 @@ test("hover cancels the deadline and leaving starts a full new countdown", async
   assert.equal(fsm.state, "petit");
 });
 
+test("hover opens hidden and compact islands immediately without a collapse timer", async (t) => {
+  for (const initial of ["hidden", "petit"]) {
+    await t.test(initial, async (t) => {
+      const { fsm, transitions, timers, advance } = await setup(t);
+      if (initial === "petit") fsm.reveal();
+      fsm.mouseEntered();
+      assert.equal(fsm.state, "home");
+      assert.deepEqual(transitions.at(-1), { from: initial, to: "home", deadline: null });
+      assert.equal(timers.size, 0);
+      advance(60_000);
+      assert.equal(fsm.state, "home");
+      fsm.mouseLeft();
+      advance(fsm.homeToPetitDelay * 1000);
+      assert.equal(fsm.state, "petit");
+    });
+  }
+});
+
 test("explicit cancellation and forced transitions cannot leave a stale home deadline", async (t) => {
   const actions = {
     cancelTimers: "home",

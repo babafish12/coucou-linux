@@ -17,6 +17,51 @@ test("auto-close keeps the compact island visible and clickable after a long idl
   assert.equal(app.State.mode, "expanded");
 });
 
+test("hover opens the compact island immediately and auto-close starts only after leaving", async (t) => {
+  const app = await setupIsland(t, { autoClose: 1 });
+  app.island.reveal();
+  app.advance(1000);
+  app.island.onCursor(360, 20);
+  assert.equal(app.State.mode, "expanded");
+  assert.equal(app.island.fsm.homeCollapseDeadline, null);
+  app.advance(3000);
+  assert.equal(app.State.mode, "expanded", "stationary hover must keep the island open");
+  assert.deepEqual(app.focus, [], "hover must not take keyboard focus");
+  app.island.onCursor(1000, 500);
+  assert.equal(app.island.fsm.homeCollapseDeadline, app.now() + 1000);
+  app.advance(1500);
+  assert.equal(app.State.mode, "compact");
+  app.island.onCursor(360, 20);
+  assert.equal(app.State.mode, "expanded", "hover must reopen after auto-close");
+});
+
+test("the hidden wake strip opens Home without a click or premature countdown", async (t) => {
+  const app = await setupIsland(t, { autoClose: 1 });
+  app.island.wakeStrip.dispatch("mouseenter");
+  assert.equal(app.State.mode, "expanded");
+  assert.equal(app.island.fsm.homeCollapseDeadline, null);
+  app.advance(3000);
+  assert.equal(app.State.mode, "expanded");
+  assert.deepEqual(app.focus, []);
+  app.island.onCursor(1000, 500);
+  assert.equal(app.island.fsm.homeCollapseDeadline, app.now() + 1000);
+});
+
+test("explicit collapse remains compact until the pointer leaves and re-enters", async (t) => {
+  const app = await setupIsland(t);
+  app.island.reveal();
+  app.advance(1000);
+  app.island.onCursor(360, 20);
+  app.advance(1000);
+  app.island.collapse();
+  app.island.onCursor(360, 20);
+  app.advance(1000);
+  assert.equal(app.State.mode, "compact");
+  app.island.onCursor(1000, 500);
+  app.island.onCursor(360, 20);
+  assert.equal(app.State.mode, "expanded");
+});
+
 test("hidden changes stay dirty without drawing, then reveal uses the latest state", async (t) => {
   const app = await setupIsland(t);
   app.State.updateTask("integration_claude", "working");

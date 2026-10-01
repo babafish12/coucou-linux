@@ -48,7 +48,7 @@ then this is what an unsigned installer looks like on Windows, and you can alway
 
 | What you do | What happens |
 |---|---|
-| Click the small island | It opens |
+| Hover over the small island | It opens immediately |
 | Click Mochi | It gets annoyed. Three times in a row and it goes dizzy |
 | Rest the pointer on Mochi for two seconds | Hearts |
 | Drag a file onto the island | Mochi turns into a box, swallows it, then offers to answer questions about it |

@@ -31,8 +31,9 @@ want Coucou to start when you sign in. If a release build already exists, use
 
 Use **Coucou** in your applications menu or run `coucou`. Start `coucou --settings`
 to open settings, including when Coucou is already running. Quit through its
-system tray menu. Mochi stays visible as a compact island when idle; click it to
-open. Auto-close returns to the compact island. **Pause** in the tray menu can
+system tray menu. Mochi stays visible as a compact island when idle; hover over it
+to open it immediately. Auto-close returns to the compact island after the pointer
+leaves. Conversation views stay open until you close them or switch views. **Pause** in the tray menu can
 still hide it explicitly.
 
 ## Codex behavior
@@ -43,22 +44,33 @@ still hide it explicitly.
   Prompts, command arguments and tool outputs are not copied into the activity UI.
 - **Approvals:** answer permissions and questions in Codex itself. Reading a log
   does not provide an approval channel, so Coucou never displays an Allow button
-  for a monitored Codex session.
-- **Chat:** runs `codex exec --json` with your saved account. No Anthropic key or
-  separate OpenAI API key is required. Turns use read-only sandboxing, disabled
-  shell tools/integrations/hooks, and ephemeral execution. User configuration is
-  not loaded for these chat processes. Model and reasoning choices come from
-  Coucou's settings, with defaults supplied by the Codex model catalog.
-  This chat answers questions; it does not perform agent actions on your files.
+  for a monitored Codex session. **Open chat** on completion opens the exact
+  session through Codex Desktop's `codex://` link handler, rather than opening
+  the project folder. Missing handlers or invalid session IDs show an error.
+- **Built-in chat:** keeps a local `codex app-server` connection and ephemeral
+  thread open across replies, using your saved account. Coucou warms the model
+  catalog and connection at startup without starting an inference request.
+  Text streams into the reply as it arrives. No Anthropic key or separate OpenAI
+  API key is required. Model and reasoning choices still come from Coucou's
+  settings and apply to the next turn.
+- **Local tools:** chat can run commands and edit files. Workspace-write
+  sandboxing limits writes to Coucou's local chat folder and disables sandbox
+  network access. Additional access uses Codex's on-request approval flow:
+  review the command, file changes or requested permissions, then choose
+  **Allow once** or **Deny**. Permission grants are limited to the current turn.
+  **Stop** interrupts the turn; interrupted or failed actions are never retried
+  automatically by Coucou. Actions already completed are not undone by Stop.
+  Apps, plugins, hooks, browser/computer-use and subagents are disabled for this
+  client. This enables shell/file tasks, not Codex Desktop's GUI/browser tools.
 - **Attachments:** UTF-8 text/code up to 200 KB and supported images up to 10 MB.
   PDF and other binary formats report an unsupported-format error. Files are
-  copied into Coucou's inbox; originals are not modified.
+  copied into Coucou's inbox; attaching a file does not modify its original.
 - **Scope:** local desktop/interactive CLI sessions only. Cloud, remote, subagent,
   `codex exec` and ephemeral sessions are not shown. The rollout format is a
   Codex implementation detail and may require updates after a CLI upgrade.
 
 The CLI integration follows the official
-[Codex non-interactive documentation](https://learn.chatgpt.com/docs/non-interactive-mode).
+[Codex app-server documentation](https://learn.chatgpt.com/docs/app-server).
 Optional service integrations stay disabled initially. Their credentials use the
 Linux Secret Service (for example GNOME Keyring or KeePassXC), never a plaintext
 fallback. Codex manages its own authentication; Coucou does not read its tokens.
@@ -80,14 +92,13 @@ instead of a fixed list. See the official [app-server documentation](https://lea
   a different model.
 
 Preferences persist in Coucou's `settings.json`. The chosen model and effort are
-validated and passed to each chat turn using `--model` and
-`-c 'model_reasoning_effort="…"'`. They affect the next Coucou reply, including in
+validated and passed to each app-server turn as `model` and `effort`. They affect the next Coucou reply, including in
 an existing chat, without changing Codex settings or other Codex sessions.
 A catalog entry does not guarantee that a particular request will be allowed by
 your account; request errors are shown in the chat.
 
 Each new chat reply displays **Requested: model · reasoning** using the resolved
-values passed by the backend to that turn's Codex process. Changing preferences
+values passed by the backend to that Codex turn. Changing preferences
 does not relabel earlier replies. A model's generated answer to “Which model
 are you?” can be wrong; use the request label to inspect Coucou's selection.
 The CLI's JSON response does not independently confirm the provider's runtime
@@ -152,5 +163,9 @@ npm run tauri -- dev
 
 `npm run build` verifies TypeScript and produces the UI assets. Cargo tests cover
 Codex event parsing, bounded log reading, concurrent sessions, chat responses,
-attachments and window input regions. A full visual check still needs a real
+attachments, streaming, approvals, cancellation and window input regions.
+`node scripts/test-island-performance.mjs` also checks hover, exact chat navigation
+and streamed chat rendering. `/dev/chat-preview.html` in the Vite dev server
+provides local fixtures for streaming, approvals, failures and Stop without an
+account or real actions. A full native-window check still needs a real
 Linux desktop. The macOS Swift project is unchanged.

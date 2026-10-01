@@ -75,7 +75,7 @@ export class Island {
 
   // Rust starts the window at full size so the launch greeting has room.
   private collapsed = false;
-  private telegramKeepsOpen = false;
+  private conversationKeepsOpen = false;
   private collapseTimer: number | null = null;
   private wasInIsland = false;
   /** Last shape handed to Rust for the click-through test. */
@@ -121,9 +121,16 @@ export class Island {
         State.setFocus(id);
         Sound.play("blip");
       },
-      openTerminal: () => {
-        const cwd = State.focusTask?.sessionCwd ?? null;
-        void Bridge.openInVSCode(cwd);
+      openTerminal: async () => {
+        const task = State.focusTask;
+        if (State.agentProvider === "codex") {
+          const sessionId = task?.sessionId;
+          if (!sessionId) throw new Error("No Codex chat is available for this session yet.");
+          await Bridge.openCodexSession(sessionId);
+          if (State.view === "finished" && State.focusTask?.sessionId === sessionId) this.collapse();
+        } else {
+          await Bridge.openInVSCode(task?.sessionCwd ?? null);
+        }
       },
       // The ↗ button — same targets as openAgentTarget() on macOS.
       openTarget: () => {
@@ -571,7 +578,10 @@ export class Island {
     // The wake strip is the only thing the OS can hit while the island is hidden.
     this.wakeStrip.addEventListener("mouseenter", () => {
       Sound.resume();
-      if (State.mode === "hidden") this.fsm.mouseEntered();
+      if (State.mode === "hidden") {
+        this.wasInIsland = true;
+        this.fsm.mouseEntered();
+      }
     });
 
     this.islandEl.addEventListener("mousedown", (e) => {
@@ -618,14 +628,16 @@ export class Island {
       x >= rect.x - HIT_MARGIN && x <= rect.x + rect.w + HIT_MARGIN &&
       y >= rect.y - HIT_MARGIN && y <= rect.y + rect.h + HIT_MARGIN;
 
-    if (inIsland && !this.wasInIsland) {
+    const wasInIsland = this.wasInIsland;
+    // Transitions use this flag to decide whether to start auto-close.
+    this.wasInIsland = inIsland;
+    if (inIsland && !wasInIsland) {
       if (this.fsm.state === "coucou") this.greeting.hover();
       this.fsm.mouseEntered();
     }
-    if (!inIsland && this.wasInIsland) {
+    if (!inIsland && wasInIsland) {
       this.fsm.mouseLeft();
     }
-    this.wasInIsland = inIsland;
 
     // Bot hover → love
     const overBot = State.mode === "expanded" && State.stateOverride == null && this.isBotHit(x, y);
@@ -932,11 +944,11 @@ export class Island {
 
   /** Lifecycle changes must run even when hidden DOM work is deferred. */
   private syncLifecycle() {
-    const telegramKeepsOpen = State.mode === "expanded" && State.view === "telegram";
-    if (telegramKeepsOpen !== this.telegramKeepsOpen) {
-      this.telegramKeepsOpen = telegramKeepsOpen;
-      this.fsm.pinned = State.isPinned || telegramKeepsOpen;
-      if (telegramKeepsOpen) this.fsm.cancelTimers();
+    const conversationKeepsOpen = State.mode === "expanded" && (State.view === "telegram" || State.view === "prompt");
+    if (conversationKeepsOpen !== this.conversationKeepsOpen) {
+      this.conversationKeepsOpen = conversationKeepsOpen;
+      this.fsm.pinned = State.isPinned || conversationKeepsOpen;
+      if (conversationKeepsOpen) this.fsm.cancelTimers();
       else if (!this.wasInIsland) this.fsm.mouseLeft();
     }
   }

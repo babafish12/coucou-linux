@@ -37,8 +37,9 @@ export class IslandStateMachine {
   mouseEntered() {
     switch (this.state) {
       case "hidden":
+      case "petit":
         this.cancelTimers();
-        this.transition("petit");
+        this.transition("home");
         break;
       case "home":
         this.clear("homeCollapse");
