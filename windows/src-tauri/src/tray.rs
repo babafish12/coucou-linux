@@ -9,12 +9,17 @@ use crate::island::WINDOW_LABEL;
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open Coucou", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    #[cfg(target_os = "linux")]
+    let telegram = MenuItem::with_id(app, "telegram", "Telegram…", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "Pause", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
 
+    #[cfg(windows)]
     let menu = Menu::with_items(app, &[&open, &sep1, &settings, &pause, &sep2, &quit])?;
+    #[cfg(target_os = "linux")]
+    let menu = Menu::with_items(app, &[&open, &sep1, &settings, &telegram, &pause, &sep2, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("coucou")
         .tooltip("Coucou")
@@ -22,6 +27,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app: &AppHandle, event| match event.id.as_ref() {
             "quit" => app.exit(0),
             "settings" => crate::show_settings_window(app),
+            #[cfg(target_os = "linux")]
+            "telegram" => {
+                if let Err(error) = crate::open_telegram_window(app.clone()) {
+                    crate::log::line(format!("telegram window failed: {error}"));
+                }
+            }
             id => {
                 let _ = app.emit_to(WINDOW_LABEL, "tray", id.to_string());
             }

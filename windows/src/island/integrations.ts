@@ -6,6 +6,7 @@ import { onEvent, Bridge, type IntegrationUpdate } from "../core/bridge";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import type { Island } from "./island";
+import { processTelegramNotifications } from "../telegram/notifications";
 
 /** Which Credential Manager key backs each pill. */
 const KEY_FOR: Record<string, string> = {
@@ -19,14 +20,22 @@ const KEY_FOR: Record<string, string> = {
 };
 
 const clearTimers = new Map<string, number>();
+let telegramRefreshPending = false;
+let telegramUnreadCount: number | null = null;
+let telegramIsland: Island | null = null;
 
 export function registerIntegrationHandlers(island: Island) {
+  telegramIsland = island;
   void onEvent<IntegrationUpdate>("integration", (update) => handle(island, update));
   void refreshConfigured();
+  if (State.agentProvider === "codex") {
+    window.setInterval(() => void refreshTelegramSummary(), 2_000);
+  }
 }
 
 /** Asks Rust which keys exist so the idle cards can say so. */
 export async function refreshConfigured() {
+  void refreshTelegramSummary();
   for (const [id, key] of Object.entries(KEY_FOR)) {
     const present = (await Bridge.secretPresent(key)) ?? false;
     const info = State.integrations[id] ?? { data: {}, error: null, loaded: false, configured: false };
@@ -38,6 +47,69 @@ export async function refreshConfigured() {
   };
   State.integrations.integration_claude = { ...claude, configured: hooks };
   State.notify();
+}
+
+/** Poll only the cached TDLib summary, including while the chat window is closed. */
+export async function refreshTelegramSummary() {
+  const id = "integration_telegram";
+  if (State.agentProvider !== "codex" || !State.settings.activeIntegrations.includes(id)) {
+    telegramUnreadCount = null;
+    if (telegramIsland) processTelegramNotifications(telegramIsland, []);
+    return;
+  }
+  if (telegramRefreshPending) return;
+  telegramRefreshPending = true;
+  try {
+    const summary = await Bridge.telegramSummary();
+    if (!State.settings.activeIntegrations.includes(id)) {
+      telegramUnreadCount = null;
+      if (telegramIsland) processTelegramNotifications(telegramIsland, []);
+      return;
+    }
+    const previous = State.integrations[id];
+    const info = {
+      data: { ...summary },
+      error: summary.error ?? null,
+      loaded: true,
+      configured: summary.configured,
+    };
+    State.integrations[id] = info;
+    const task = State.tasks.find((t) => t.id === id);
+    const count = summary.state === "ready" && !summary.paused ? summary.unreadCount : null;
+    if (task) {
+      task.state = summary.error ? "error" : "idle";
+      if (summary.error) {
+        if (State.focusId !== id) task.pillBadge = "error";
+      } else if (count === null || count === 0 || task.pillBadge === "error") {
+        task.pillBadge = null;
+      } else if (telegramUnreadCount !== null && count > telegramUnreadCount && State.focusId !== id) {
+        // Totals can also change during sync. Only TDLib notification events
+        // below may open a message preview.
+        task.pillBadge = "finished";
+      }
+    }
+    telegramUnreadCount = count;
+    if (telegramIsland) processTelegramNotifications(telegramIsland, summary.notifications ?? []);
+    if (JSON.stringify(previous) !== JSON.stringify(info)) State.notify();
+  } catch {
+    const previous = State.integrations[id];
+    State.integrations[id] = {
+      data: {},
+      error: "Telegram status is unavailable. Open Telegram to reconnect.",
+      loaded: false,
+      configured: previous?.configured ?? false,
+    };
+    telegramUnreadCount = null;
+    if (telegramIsland) processTelegramNotifications(telegramIsland, []);
+    const task = State.tasks.find((t) => t.id === id);
+    if (task) {
+      task.state = "error";
+      if (State.focusId !== id) task.pillBadge = "error";
+    }
+    State.notify();
+  } finally {
+    telegramRefreshPending = false;
+  }
 }
 
 function handle(island: Island, update: IntegrationUpdate) {

@@ -610,11 +610,13 @@ dependencies = [
 
 [[package]]
 name = "coucou"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
+ "base64 0.22.1",
  "gdkx11",
  "gtk",
  "keyring",
+ "libloading",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -629,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "coucou-hook"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde_json",
  "windows 0.61.3",

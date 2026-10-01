@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Telegram island preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <aside id="preview-controls">
+      <b>Telegram island preview · local fixtures only</b>
+      <p>No Telegram account or network connection is used.</p>
+      <button id="preview-home">Home</button>
+      <button id="preview-collapse">Collapse</button>
+      <button id="preview-hidden">Hide</button>
+      <button id="preview-notify">New message</button>
+      <button id="preview-repeat">Repeat notification</button>
+      <button id="preview-auto-close">Auto-close: 3s</button>
+      <button id="preview-connection">Disconnect</button>
+      <label><input type="checkbox" id="preview-fail" /> Fail sends</label>
+      <output id="preview-status" aria-live="polite"></output>
+    </aside>
+    <script type="module" src="./telegram-preview.ts"></script>
+  </body>
+</html>

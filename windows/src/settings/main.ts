@@ -6,9 +6,11 @@ import "./settings.css";
 import { Bridge, onEvent, type CodexModel, type HookStatus } from "../core/bridge";
 import { DEFAULT_SETTINGS, State, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
+import { Telegram, telegramStatusLabel } from "../telegram/api";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let version = "";
+let syncIntegrationControls = () => {};
 
 const root = document.getElementById("settings-root")!;
 
@@ -396,6 +398,56 @@ function codexSection(status: HookStatus): HTMLElement {
 
 // ── Integrations section ──────────────────────────────────────────────────────
 
+function telegramSection(): HTMLElement {
+  const dot = statusDot(false);
+  const summary = h("div", { class: "hint", text: "Checking Telegram…" });
+  const feedback = h("div", { role: "status", "aria-live": "polite" });
+  const open = h("button", { id: "open-telegram", class: "primary", text: "Connect Telegram" });
+  open.addEventListener("click", async () => {
+    open.disabled = true;
+    clear(feedback);
+    try {
+      if (!settings.activeIntegrations.includes("integration_telegram")) {
+        if (settings.activeIntegrations.length < MAX_ACTIVE) {
+          settings.activeIntegrations = [...settings.activeIntegrations, "integration_telegram"];
+          await save();
+          syncIntegrationControls();
+        } else {
+          feedback.append(h("div", { class: "notice warn", text: "All four Home slots are in use. Turn off another integration below to show Telegram on Home." }));
+        }
+      }
+      await Telegram.openWindow();
+    }
+    catch (error) { feedback.append(h("div", { class: "notice err", text: String(error).replace(/^Error:\s*/, "") })); }
+    finally { open.disabled = false; }
+  });
+  let disposed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  async function refresh() {
+    try {
+      const status = await Telegram.status();
+      if (disposed) return;
+      dot.style.background = status.state === "ready" && !status.paused ? "#22c55e" : "#f5a524";
+      summary.textContent = !status.runtimeAvailable ? "Install the Telegram runtime to connect. Open Telegram for details."
+        : !status.configured ? "Connect your personal Telegram account to read existing chats and reply."
+        : `${status.paused ? "Paused" : telegramStatusLabel(status.state)}${status.accountName ? ` · ${status.accountName}` : ""}`;
+      open.textContent = status.configured ? "Open Telegram" : "Connect Telegram";
+    } catch (error) {
+      summary.textContent = `Could not check Telegram: ${String(error).replace(/^Error:\s*/, "")}`;
+    }
+    if (!disposed) timer = setTimeout(() => void refresh(), 5000);
+  }
+  window.addEventListener("beforeunload", () => { disposed = true; if (timer) clearTimeout(timer); }, { once: true });
+  void refresh();
+  return h("section", { id: "telegram-settings" },
+    h("h2", {}, dot, h("span", { text: "Telegram" })),
+    summary,
+    h("div", { class: "hint", text: "Preview two recent chats on Home and reply directly in the island. Messages are only sent when you click Send. Open Telegram here for setup, the full list, and older messages." }),
+    h("div", { class: "row" }, open),
+    feedback,
+  );
+}
+
 interface IntegrationDef {
   id: string;
   name: string;
@@ -429,15 +481,30 @@ const MAX_ACTIVE = 4;
 function integrationsSection(present: Record<string, boolean>): HTMLElement {
   const note = h("div", { class: "hint" });
   const list = h("div", { style: "display:flex;flex-direction:column;gap:14px" });
+  const switches = new Map<string, HTMLButtonElement>();
 
   function updateNote() {
     const used = settings.activeIntegrations.length;
-    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the system credential store.`;
+    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show on Home next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the system credential store.`;
   }
 
-  for (const def of INTEGRATIONS) {
+  const integrations = State.agentProvider === "codex"
+    ? [{ id: "integration_telegram", name: "Telegram", color: "#2481B5", fields: [] }, ...INTEGRATIONS]
+    : INTEGRATIONS;
+  syncIntegrationControls = () => {
+    for (const [id, sw] of switches) {
+      const active = settings.activeIntegrations.includes(id);
+      sw.classList.toggle("on", active);
+      sw.setAttribute("aria-pressed", String(active));
+      sw.disabled = !active && settings.activeIntegrations.length >= MAX_ACTIVE;
+    }
+    updateNote();
+  };
+
+  for (const def of integrations) {
     const active = settings.activeIntegrations.includes(def.id);
-    const sw = h("button", { class: active ? "switch on" : "switch" });
+    const sw = h("button", { id: `toggle-${def.id}`, class: active ? "switch on" : "switch", "aria-label": `Show ${def.name} on Home`, "aria-pressed": active });
+    switches.set(def.id, sw);
     sw.addEventListener("click", () => {
       const on = settings.activeIntegrations.includes(def.id);
       if (on) {
@@ -446,12 +513,14 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
         if (settings.activeIntegrations.length >= MAX_ACTIVE) return;
         settings.activeIntegrations = [...settings.activeIntegrations, def.id];
       }
-      sw.classList.toggle("on", !on);
-      updateNote();
+      syncIntegrationControls();
       void save();
     });
 
     const rows = h("div", { style: "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-width:0" });
+    if (def.id === "integration_telegram") {
+      rows.append(h("div", { class: "hint", text: "Uses your Telegram login above. Shows two recent chats with message previews and unread counts; select a chat to reply in the island. Reconnects your saved session while enabled." }));
+    }
     for (const field of def.fields) {
       const input = h("input", {
         type: field.secret ? "password" : "text",
@@ -494,7 +563,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
     );
   }
 
-  updateNote();
+  syncIntegrationControls();
   return h("section", {}, h("h2", {}, h("span", { text: "Integrations" })), note, list);
 }
 
@@ -511,12 +580,14 @@ function generalSection(): HTMLElement {
   });
 
   const autoClose = h("input", {
-    type: "number", min: "5", max: "120", step: "1",
-    value: String(Math.round(settings.autoCloseInterval)),
+    id: "auto-close", type: "number", min: "0.1", max: "120", step: "0.1",
+    value: String(settings.autoCloseInterval),
     style: "width:72px",
   }) as HTMLInputElement;
   autoClose.addEventListener("change", () => {
-    settings.autoCloseInterval = Math.max(5, Math.min(120, Number(autoClose.value) || 15));
+    const seconds = autoClose.valueAsNumber;
+    settings.autoCloseInterval = Math.max(0.1, Math.min(120,
+      Number.isFinite(seconds) ? seconds : settings.autoCloseInterval));
     autoClose.value = String(settings.autoCloseInterval);
     void save();
   });
@@ -542,7 +613,7 @@ function generalSection(): HTMLElement {
       volume,
     ),
     h("div", { class: "row" },
-      h("label", { text: "Auto-close" }),
+      h("label", { for: "auto-close", text: "Auto-close" }),
       autoClose,
       h("span", { class: "hint", text: "seconds after you leave the island" }),
     ),
@@ -582,7 +653,7 @@ async function main() {
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
-    ...(State.agentProvider === "codex" ? [codexSection(status)] : [claudeSection(status), apiSection(hasKey)]),
+    ...(State.agentProvider === "codex" ? [codexSection(status), telegramSection()] : [claudeSection(status), apiSection(hasKey)]),
     integrationsSection(present),
     generalSection(),
     h("div", {
@@ -593,6 +664,7 @@ async function main() {
 
   void onEvent<Settings>("settings-changed", (s) => {
     settings = { ...settings, ...s };
+    syncIntegrationControls();
   });
 }
 

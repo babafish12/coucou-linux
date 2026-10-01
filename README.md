@@ -65,6 +65,10 @@ For paths, configuration, and more setup details, see the
 - **Model and reasoning selectors:** choose from the installed Codex catalog,
   with supported reasoning levels and defaults for each model. Each reply
   shows the model and reasoning requested for that turn.
+- **Telegram on Home:** see the top two chats from Telegram's main list, with
+  their latest message and unread counts. Select a chat to read and send text
+  replies directly in the animated island, without opening another window.
+  New notifications open a message preview with a direct reply action.
 - **File context:** drop UTF-8 text or code files up to 200 KB, or supported images
   up to 10 MB, then ask questions about them. Original files are not modified.
 - **A window that fits the island:** the native window follows the visible
@@ -95,6 +99,36 @@ Codex model and reasoning dropdowns. Choose **Codex default** and **Model defaul
 to follow the catalog's defaults, or select explicit values. Choices apply to
 the next chat reply. **Refresh models** reloads the catalog after an account or
 CLI change. Quit from the system tray menu.
+
+### Connect Telegram
+
+Install the optional Telegram runtime once:
+
+```sh
+./scripts/install-telegram-linux.sh
+```
+
+This builds official TDLib and installs it under `~/.local/lib/coucou/` without
+sudo. See [Telegram setup](docs/TELEGRAM.md) for build dependencies. Restart
+Coucou, then open **Settings → Telegram → Connect Telegram**, choose **Telegram…**
+in the tray, or run `coucou --telegram`.
+
+Enter your Telegram API ID and API hash from
+[my.telegram.org](https://my.telegram.org/apps), then complete the phone number,
+login code, and any two-step verification requested by Telegram. Credentials
+stay in the system keyring. Messages go to the selected chat only when you click
+**Send**; they are not automatically passed to Codex.
+
+Enable **Settings → Integrations → Telegram** to show its pill on Home. Opening
+Telegram from Settings enables it automatically when a Home slot is available.
+Home shows the top two chats in Telegram's main-list order. Select either one to
+read its latest 50 messages and reply directly in the island. Visible chat lists
+and the selected conversation refresh about every five seconds; connection status
+and unread totals continue updating from the client's cache in the background.
+Use Settings or the tray menu for the separate Telegram window, which provides
+account setup, the full recent-chat list, and older messages. An enabled Telegram
+integration reconnects your saved session when Coucou starts. Up to four optional
+integrations can be shown alongside Codex.
 
 ### Current limits
 

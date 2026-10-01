@@ -91,8 +91,10 @@ are you?” can be wrong; use the request label to inspect Coucou's selection.
 The CLI's JSON response does not independently confirm the provider's runtime
 model identity, so the label reports the request rather than making that claim.
 
-For the feasibility of reading and replying to existing Telegram chats, see
-[Telegram connector](TELEGRAM.md). That connector is not implemented yet.
+For reading and replying to existing Telegram cloud chats, open
+**Settings → Telegram → Connect Telegram** or run `coucou --telegram`.
+The optional TDLib runtime, personal account login, and current limits are
+described in [Telegram setup](TELEGRAM.md).
 
 ## Linux window support
 

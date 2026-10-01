@@ -25,6 +25,8 @@ mod log;
 mod pipe;
 mod secrets;
 mod settings;
+#[cfg(target_os = "linux")]
+mod telegram;
 mod tray;
 #[cfg(windows)]
 mod win_user;
@@ -94,6 +96,15 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         let mut current = shared.settings.lock().unwrap();
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
+        #[cfg(target_os = "linux")]
+        {
+            let enabled = settings.active_integrations.iter().any(|id| id == "integration_telegram");
+            if current.active_integrations.iter().any(|id| id == "integration_telegram") != enabled {
+                if let Err(error) = app.state::<telegram::Telegram>().set_home_enabled(enabled) {
+                    eprintln!("[coucou] Telegram Home integration: {error}");
+                }
+            }
+        }
         *current = settings.clone();
         (screen_changed, autostart_changed)
     };
@@ -488,6 +499,32 @@ fn open_settings_window(app: AppHandle) {
     show_settings_window(&app);
 }
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn open_telegram_window(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("telegram") {
+        win.unminimize().map_err(|error| error.to_string())?;
+        win.show().map_err(|error| error.to_string())?;
+        return win.set_focus().map_err(|error| error.to_string());
+    }
+    #[allow(unused_mut)]
+    let mut url = WebviewUrl::App("telegram.html".into());
+    #[cfg(dev)]
+    if let Some(mut base) = app.config().build.dev_url.clone() {
+        base.set_path("/telegram.html");
+        url = WebviewUrl::External(base);
+    }
+    WebviewWindowBuilder::new(&app, "telegram", url)
+        .title("Telegram — Coucou")
+        .inner_size(960.0, 700.0)
+        .min_inner_size(740.0, 540.0)
+        .resizable(true)
+        .center()
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 pub fn run() {
     let loaded = settings::load();
     let gate = Arc::new(PollGate::new());
@@ -503,10 +540,17 @@ pub fn run() {
     #[cfg(windows)]
     let builder = builder.manage(Pending::default())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None));
+    #[cfg(target_os = "linux")]
+    let builder = builder.manage(telegram::Telegram::default());
     builder
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if argv.iter().any(|arg| arg == "--settings") {
                 show_settings_window(app);
+            } else if argv.iter().any(|arg| arg == "--telegram") {
+                #[cfg(target_os = "linux")]
+                if let Err(error) = open_telegram_window(app.clone()) {
+                    log::line(format!("telegram window failed: {error}"));
+                }
             } else {
                 let _ = app.emit_to(island::WINDOW_LABEL, "tray", "open".to_string());
             }
@@ -555,15 +599,48 @@ pub fn run() {
             refresh_integration,
             open_n8n,
             open_settings_window,
+            #[cfg(target_os = "linux")]
+            open_telegram_window,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_status,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_summary,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_configure,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_connect,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_authenticate,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_chats,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_history,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_send,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_disconnect,
+            #[cfg(target_os = "linux")]
+            telegram::telegram_logout,
             set_paused,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
+            // Only the primary instance may reopen the saved Telegram database.
+            #[cfg(target_os = "linux")]
+            if loaded.active_integrations.iter().any(|id| id == "integration_telegram") {
+                if let Err(error) = app.state::<telegram::Telegram>().set_home_enabled(true) {
+                    eprintln!("[coucou] Telegram Home integration: {error}");
+                }
+            }
             tray::build(&handle)?;
             // Before the island: see create_settings_window.
             create_settings_window(&handle);
             if std::env::args().any(|arg| arg == "--settings") {
                 show_settings_window(&handle);
+            }
+            #[cfg(target_os = "linux")]
+            if std::env::args().any(|arg| arg == "--telegram") {
+                open_telegram_window(handle.clone())?;
             }
 
             if let Some(win) = island::window(&handle) {
@@ -584,6 +661,16 @@ pub fn run() {
             integrations::start(handle.clone());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Coucou");
+        .build(tauri::generate_context!())
+        .expect("error while building Coucou")
+        .run(|app, event| {
+            #[cfg(target_os = "linux")]
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                if !app.state::<telegram::Telegram>().shutdown() {
+                    log::line("Telegram shutdown exceeded its deadline");
+                }
+            }
+            #[cfg(windows)]
+            let _ = (app, event);
+        });
 }

@@ -19,6 +19,7 @@ import { USC, UploadSeq } from "../upload/sequence";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
 import { h } from "../views/dom";
 import { IslandStateMachine } from "./fsm";
+import { TelegramNotifications } from "../telegram/notifications";
 
 const BOT_OVERHANG = 40;
 /** Same margin as the Rust hit test (src-tauri/src/island.rs). */
@@ -68,6 +69,7 @@ export class Island {
 
   // Rust starts the window at full size so the launch greeting has room.
   private collapsed = false;
+  private telegramKeepsOpen = false;
   private collapseTimer: number | null = null;
   private wasInIsland = false;
   /** Last shape handed to Rust for the click-through test. */
@@ -106,6 +108,7 @@ export class Island {
   private build() {
     const actions: ViewActions = {
       setView: (v) => this.setView(v),
+      showTelegramNotification: () => this.showTelegramNotification(),
       collapse: () => this.collapse(),
       setFocus: (id) => {
         State.setFocus(id);
@@ -128,6 +131,7 @@ export class Island {
           integration_calcom: "https://app.cal.com/bookings",
         };
         if (task.id === "integration_claude") void Bridge.openInVSCode(task.sessionCwd ?? null);
+        else if (task.id === "integration_telegram") this.setView("telegram");
         else if (task.id === "integration_n8n") void Bridge.openN8n();
         else if (urls[task.id]) void Bridge.openUrl(urls[task.id]);
       },
@@ -332,6 +336,17 @@ export class Island {
 
   reveal() {
     this.fsm.reveal();
+  }
+
+  /** Incoming messages reveal a preview without taking keyboard focus. */
+  showTelegramNotification() {
+    if (!TelegramNotifications.current || State.paused) return;
+    this.alert("telegram-notification");
+    // forceHome cancels timers even if the previous notification is still open.
+    if (!this.wasInIsland) {
+      this.fsm.mouseLeft();
+      this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
+    }
   }
 
   /** An alert stopped waiting for an answer: let the island auto-close again. */
@@ -800,7 +815,8 @@ export class Island {
     if (!ctx) return;
 
     const focus = State.focusTask;
-    this.engine.bodyColor = focus?.isIntegration ? hexToRGB(focus.color) : null;
+    this.engine.bodyColor = State.view === "telegram-notification" && State.mode === "expanded"
+      ? hexToRGB("#2481B5") : focus?.isIntegration ? hexToRGB(focus.color) : null;
     this.engine.particleOverhang = BOT_OVERHANG;
     this.engine.lookX = this.lookX();
     this.engine.lookY = this.lookY();
@@ -847,26 +863,37 @@ export class Island {
   private syncDom() {
     const expanded = State.mode === "expanded";
     const greetingActive = expanded && State.view === "greeting";
+    const telegramKeepsOpen = expanded && State.view === "telegram";
+    if (telegramKeepsOpen !== this.telegramKeepsOpen) {
+      this.telegramKeepsOpen = telegramKeepsOpen;
+      this.fsm.pinned = State.isPinned || telegramKeepsOpen;
+      if (telegramKeepsOpen) this.fsm.cancelTimers();
+      else if (!this.wasInIsland) this.fsm.mouseLeft();
+    }
 
     this.contentEl.style.opacity = expanded && !greetingActive ? "1" : "0";
     this.contentEl.style.pointerEvents = expanded && !greetingActive ? "auto" : "none";
+    this.contentEl.inert = !expanded || greetingActive;
     this.greetingCanvas.style.display = greetingActive ? "block" : "none";
 
     this.header.sync();
     for (const [name, view] of this.views) {
       const on = name === State.view;
       view.el.classList.toggle("on", on);
+      view.el.inert = !on;
       if (on) view.sync();
     }
 
-    // The chat is the only view with a text field, so it is the only time the
-    // island is allowed to take keyboard focus.
+    // Only conversation views take keyboard focus for their composers.
     if (this.lastSyncedView !== State.view) {
-      const wasChat = this.lastSyncedView === "prompt";
+      const wasChat = this.lastSyncedView === "prompt" || this.lastSyncedView === "telegram";
       this.lastSyncedView = State.view;
-      if (State.view === "prompt") {
+      if (State.view === "prompt" || State.view === "telegram") {
+        const view = State.view;
         void Bridge.focusWindow(true);
-        window.setTimeout(() => this.views.get("prompt")?.focus?.(), 120);
+        window.setTimeout(() => {
+          if (State.mode === "expanded" && State.view === view) this.views.get(view)?.focus?.();
+        }, 120);
       } else if (wasChat) {
         void Bridge.focusWindow(false);
       }

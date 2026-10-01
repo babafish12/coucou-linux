@@ -8,6 +8,9 @@ import { h, svg, clear, dot } from "./dom";
 import { ICONS } from "./icons";
 import { State, type AgentTask } from "../core/state";
 import { Bridge } from "../core/bridge";
+import { telegramStatusLabel, type TelegramChat } from "../telegram/api";
+import { InlineTelegram, refreshInlineChats } from "../telegram/inline";
+import { telegramPreview } from "./telegram";
 
 /** Same shape as the Swift `timeAgo` computed properties. */
 export function timeAgo(value: unknown): string {
@@ -113,6 +116,48 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
     header(task.color, task.id === "integration_claude" ? State.agentAppLabel : task.name, "Integration"),
     h("div", { class: "int-status" }, dot(statusColor, 5), h("span", { text: label })),
     actions,
+  );
+}
+
+// ── Telegram ──────────────────────────────────────────────────────────────────
+
+function telegramCard(hooks: IntegrationCardHooks): HTMLElement {
+  const info = State.integrations.integration_telegram;
+  const d = get("integration_telegram");
+  const ready = d.state === "ready" && !d.paused && !info?.error;
+  const state = d.paused ? "paused" : typeof d.state === "string" ? d.state : "connecting";
+  const label = info?.error ?? (info?.loaded ? telegramStatusLabel(state) : "Checking connection…");
+  const account = ready && typeof d.accountName === "string" ? d.accountName : "";
+  const status = h("span", { text: account ? `${label} · ${account}` : label });
+  status.title = status.textContent ?? "";
+  const statusRow = h("div", { class: "int-status" },
+    dot(info?.error ? "#F4505E" : ready ? "#22C55E" : "#8E939C", 5), status,
+  );
+  if (ready) {
+    const previews = h("div", { class: "tg-previews", "aria-label": "Recent Telegram chats" });
+    for (const chat of InlineTelegram.chats) previews.append(telegramPreview(chat, () => hooks.openTelegram(chat)));
+    if (!InlineTelegram.chats.length) {
+      previews.append(h("span", { class: "tg-preview-empty", role: "status", text: InlineTelegram.listError
+        ? "Could not load chats" : InlineTelegram.loaded ? "No recent chats" : "Loading chats…" }));
+    }
+    if (InlineTelegram.listError) previews.append(h("button", { class: "link-btn", text: "Retry", onclick: () => void refreshInlineChats() }));
+    const head = header("#2481B5", "Telegram", "Recent chats");
+    head.title = status.textContent ?? "";
+    return h("div", { class: "int-card int-telegram has-chats" }, head, previews);
+  }
+  const open = h("button", {
+    class: "link-btn", style: "color:#59ACD8", text: "Set up Telegram",
+    onclick: () => {
+      open.disabled = true;
+      void Bridge.openTelegramWindow().catch(() => {
+        status.textContent = "Could not open Telegram. Please try again.";
+        status.title = status.textContent;
+      }).finally(() => { open.disabled = false; });
+    },
+  });
+  return h("div", { class: "int-card int-telegram" },
+    header("#2481B5", "Telegram", "Chats"), statusRow,
+    h("div", { class: "int-actions" }, open),
   );
 }
 
@@ -379,6 +424,7 @@ export interface IntegrationCardHooks {
   openDetail(): void;
   closeDetail(): void;
   openSettings(): void;
+  openTelegram(chat?: TelegramChat): void;
 }
 
 /** True when this integration has data worth showing instead of the idle card. */
@@ -404,6 +450,7 @@ export function hasIntegrationData(id: string): boolean {
 }
 
 export function renderIntegrationCard(task: AgentTask, hooks: IntegrationCardHooks): HTMLElement {
+  if (task.id === "integration_telegram") return telegramCard(hooks);
   if (task.id === "integration_n8n") {
     const hasActivity = task.steps.length > 0 && (task.state === "finished" || task.state === "error");
     return hooks.detailOpen && hasActivity

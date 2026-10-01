@@ -11,9 +11,13 @@ import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { renderIntegrationCard, type IntegrationCardHooks } from "./integrations";
+import { buildTelegram, buildTelegramNotification } from "./telegram";
+import { InlineTelegram, selectInlineChat } from "../telegram/inline";
+import { TelegramNotifications } from "../telegram/notifications";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
+  showTelegramNotification(): void;
   collapse(): void;
   setFocus(id: string): void;
   openTerminal(): void;
@@ -84,6 +88,10 @@ export function buildHeader(actions: ViewActions): ViewHost {
 
   const gearBtn = h("button", { title: "Settings", onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: "Mute", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
+  const telegramAlert = h("button", {
+    class: "tg-alert-tab", "aria-label": "New Telegram message", hidden: true,
+    onclick: () => actions.showTelegramNotification(),
+  });
 
   function go(v: IslandViewName) {
     actions.blip();
@@ -94,14 +102,18 @@ export function buildHeader(actions: ViewActions): ViewHost {
     "div",
     { id: "header" },
     h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
-    h("div", { class: "header-actions" }, gearBtn, soundBtn),
+    h("div", { class: "header-actions" }, telegramAlert, gearBtn, soundBtn),
   );
 
   return {
     el,
     sync() {
       const v = State.view;
-      tabHome.classList.toggle("on", v === "overview" || v === "empty");
+      tabHome.classList.toggle("on", v === "overview" || v === "empty" || v === "telegram" || v === "telegram-notification");
+      const notification = TelegramNotifications.current;
+      telegramAlert.hidden = !notification || v === "telegram-notification";
+      telegramAlert.textContent = notification ? `Telegram · ${notification.chat.title}` : "";
+      telegramAlert.title = notification ? `${notification.chat.title}: ${notification.message.text}` : "";
       tabChat.classList.toggle("on", v === "prompt");
       tabDrop.classList.toggle("on", v === "upload");
       gearBtn.classList.toggle("on", v === "settings");
@@ -156,6 +168,11 @@ function buildOverview(actions: ViewActions): ViewHost {
       State.notify();
     },
     openSettings: () => actions.openSettingsWindow(),
+    openTelegram(chat) {
+      if (chat) selectInlineChat(chat);
+      actions.blip();
+      actions.setView("telegram");
+    },
   };
 
   return {
@@ -203,6 +220,7 @@ function buildOverview(actions: ViewActions): ViewHost {
           task.id, detailOpen, task.state, task.steps.join("|"),
           info?.loaded, info?.error, info?.configured,
           JSON.stringify(info?.data ?? {}),
+          task.id === "integration_telegram" ? JSON.stringify([InlineTelegram.chats, InlineTelegram.loaded, InlineTelegram.listError]) : "",
         ].join("~");
         if (key !== cardKey) {
           cardKey = key;
@@ -414,7 +432,8 @@ function buildSettings(actions: ViewActions): ViewHost {
     oninput: (e: Event) => actions.setVolume(Number((e.target as HTMLInputElement).value)),
   }) as HTMLInputElement;
   const autoLabel = h("span", {});
-  const segButtons = [10, 15, 30].map((s) =>
+  const autoClosePresets = [1, 3, 5, 10, 15, 30];
+  const segButtons = autoClosePresets.map((s) =>
     h("button", { onclick: () => actions.setAutoClose(s) }, `${s}s`),
   );
   const claudeBadge = h("span", { class: "status-badge" });
@@ -456,8 +475,8 @@ function buildSettings(actions: ViewActions): ViewHost {
       soundSwitch.classList.toggle("on", s.soundEnabled);
       volume.value = String(s.soundVolume);
       volume.style.opacity = s.soundEnabled ? "1" : "0.4";
-      autoLabel.textContent = `Auto-close · ${Math.round(s.autoCloseInterval)}s`;
-      segButtons.forEach((b, i) => b.classList.toggle("on", s.autoCloseInterval === [10, 15, 30][i]));
+      autoLabel.textContent = `Auto-close · ${s.autoCloseInterval}s`;
+      segButtons.forEach((b, i) => b.classList.toggle("on", s.autoCloseInterval === autoClosePresets[i]));
       clear(claudeBadge);
       claudeBadge.append(
         dot(s.hooksInstalled ? "#22C55E" : "#F4505E", 6),
@@ -499,6 +518,8 @@ export function buildViews(
   map.set("note", buildNote());
   map.set("settings", buildSettings(actions));
   map.set("prompt", buildPrompt(onChatHeightChange));
+  map.set("telegram", buildTelegram(actions));
+  map.set("telegram-notification", buildTelegramNotification(actions));
   map.set("upload", buildUpload());
   map.set("uploading", buildUploading());
   map.set("choose", buildChoose(actions));

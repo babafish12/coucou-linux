@@ -1,5 +1,5 @@
-// API keys live in the Windows Credential Manager, never on disk and never in
-// the front end — the island can only ask whether a key is present.
+// API keys live in the system credential store, never in preferences and never
+// returned to the front end — the island can only ask whether a key is present.
 
 use keyring::Entry;
 
@@ -16,6 +16,8 @@ pub const KNOWN_KEYS: &[&str] = &[
     "resend-api-key",
     "notion-api-key",
     "calcom-api-key",
+    "telegram-api-credentials",
+    "telegram-database-key",
 ];
 
 fn entry(key: &str) -> Option<Entry> {

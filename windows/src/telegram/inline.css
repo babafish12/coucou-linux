@@ -1,0 +1,68 @@
+.int-telegram.has-chats { padding-top: 7px; }
+.int-telegram.has-chats .int-head { gap: 5px; padding-right: 12px; }
+.int-telegram.has-chats .int-head > span { font-size: 9px; }
+.tg-previews { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.tg-preview {
+  width: 100%; min-width: 0; display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; border: 1px solid transparent; border-radius: 9px;
+  background: transparent; color: var(--ink); text-align: left; cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.tg-preview:hover, .tg-preview.selected { background: #2481b51c; border-color: #59acd825; }
+.tg-preview:active { transform: scale(.98); }
+.tg-preview:focus-visible, .tg-back:focus-visible, .tg-refresh:focus-visible, .tg-send:focus-visible {
+  outline: 2px solid #59acd8; outline-offset: -2px;
+}
+.tg-preview-copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.tg-preview-copy > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-preview-copy b { font: 550 11px/13px var(--font); }
+.tg-preview-copy > span { color: var(--dim); font: 400 10px/12px var(--font); }
+.tg-preview-arrow { color: #59acd8; display: flex; }
+.tg-unread {
+  flex-shrink: 0; padding: 2px 4px; min-width: 16px; border-radius: 8px;
+  background: #2481b5; color: white; text-align: center; font: 600 9px/12px var(--font);
+}
+.tg-preview-empty { padding-top: 7px; color: var(--dim); font-size: 11px; }
+.tg-card { display: flex; flex-direction: column; background: linear-gradient(140deg, #14222b80, transparent 50%), var(--card); }
+.tg-head { flex: 0 0 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 47px; border-bottom: 1px solid #ffffff0a; }
+.tg-head > b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tg-back, .tg-refresh { border: 0; background: transparent; color: #8cc8e9; cursor: pointer; flex-shrink: 0; }
+.tg-back { display: grid; place-items: center; width: 25px; height: 26px; border-radius: 8px; }
+.tg-back:hover, .tg-refresh:hover { background: #59acd817; }
+.tg-refresh { font: 500 10px var(--font); padding: 5px 7px; border-radius: 7px; margin-left: auto; }
+.tg-connection { color: var(--dim); font: 400 10px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-workspace { display: grid; grid-template-columns: 154px minmax(0, 1fr); flex: 1; min-height: 0; }
+.tg-sidebar { padding: 10px 7px; border-right: 1px solid #ffffff0a; min-width: 0; overflow-y: auto; }
+.tg-sidebar-label { display: block; margin: 0 5px 7px; color: var(--dim-2); font-size: 10px; }
+.tg-chat-list { display: flex; flex-direction: column; gap: 5px; }
+.tg-sidebar .tg-preview { padding: 7px 6px; }
+.tg-conversation { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.tg-history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px; padding: 9px 12px; scrollbar-width: thin; }
+.tg-empty { margin: auto 0; padding: 8px; color: var(--dim); font: 400 11px/1.5 var(--font); overflow-wrap: anywhere; }
+.tg-message { align-self: flex-start; max-width: 92%; flex-shrink: 0; padding: 7px 10px 5px; border-radius: 11px 11px 11px 3px; background: #23262c; }
+.tg-message.outgoing { align-self: flex-end; border-radius: 11px 11px 3px 11px; background: #1d465e; }
+.tg-sender { display: block; margin-bottom: 3px; color: #8cc8e9; font: 500 10px var(--font); }
+.tg-message-text { font: 400 11px/1.45 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.tg-message time { display: block; text-align: right; margin-top: 2px; color: #b3bdc6; font-size: 9px; }
+.tg-history-status { padding: 5px 12px; color: #ff8d97; font-size: 10px; max-height: 40px; overflow-y: auto; overflow-wrap: anywhere; }
+.tg-composer { padding: 7px 10px 6px; border-top: 1px solid #ffffff0a; flex-shrink: 0; }
+.tg-compose-row { display: flex; gap: 7px; align-items: stretch; }
+.tg-input { flex: 1; min-width: 0; height: 36px; padding: 8px 10px; resize: none; border: 1px solid #ffffff12; border-radius: 10px; background: #0d1218; color: var(--ink); font: 400 11px/18px var(--font); user-select: text; }
+.tg-input:focus { outline: none; border-color: #59acd8a0; box-shadow: 0 0 0 2px #59acd811; }
+.tg-send { padding: 0 12px; border: 1px solid #83caef33; border-radius: 10px; background: #2481b5; color: white; font: 600 11px var(--font); cursor: pointer; transition: background 160ms ease, transform 160ms ease; }
+.tg-send:hover:enabled { background: #3299cf; }
+.tg-send:active:enabled { transform: scale(.95); }
+.tg-send:disabled, .tg-refresh:disabled { opacity: .4; cursor: default; }
+.tg-send-notice { display: block; color: var(--dim); font: 400 9px/13px var(--font); margin-top: 3px; max-height: 27px; overflow-y: auto; overflow-wrap: anywhere; }
+.tg-alert-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; height: 100%; padding: 15px 18px 15px 110px; }
+.tg-alert-heading { display: flex; align-items: center; gap: 7px; min-width: 0; font: 400 11px var(--font); color: #8cc8e9; }
+.tg-alert-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 12px; }
+.tg-alert-sender { color: var(--dim); font-size: 10px; }
+.tg-alert-text { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 400 13px/1.5 var(--font); }
+.tg-alert-body .actions { flex-shrink: 0; }
+#header .tg-alert-tab { max-width: 220px; padding: 3px 8px; border-radius: 8px; background: #2481b526; color: #8cc8e9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 10px var(--font); }
+#header .tg-alert-tab[hidden], .tg-alert-sender[hidden] { display: none; }
+.tg-alert-text:focus-visible, .tg-alert-tab:focus-visible { outline: 2px solid #59acd8; outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  .tg-preview, .tg-send, .tg-view { transition: none; }
+}

@@ -1115,6 +1115,36 @@ input[type="range"]::-webkit-slider-thumb {
   padding-top: 6px;
 }
 
+.int-telegram .int-status > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.int-telegram-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding-top: 6px;
+  font: 400 11px var(--font);
+  color: var(--dim-3);
+}
+
+.int-telegram-counts > span {
+  white-space: nowrap;
+}
+
+.int-telegram-counts:empty {
+  display: none;
+}
+
+.int-telegram-counts b {
+  color: #c5c8cd;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .int-rows {
   display: flex;
   flex-direction: column;

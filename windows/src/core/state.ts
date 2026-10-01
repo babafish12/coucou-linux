@@ -61,6 +61,7 @@ const task = (
 /** AgentTask.integrationAgents — same ids, names and colours as macOS. */
 export const INTEGRATION_AGENTS: AgentTask[] = [
   task("integration_claude", "VS Code", "#F5F6F8", "claudeCode"),
+  task("integration_telegram", "Telegram", "#2481B5", "n8n"),
   task("integration_resend", "Resend", "#22C55E", "n8n"),
   task("integration_n8n", "n8n", "#F29B38", "n8n"),
   task("integration_vercel", "Vercel", "#7C5CFF", "n8n"),
@@ -73,6 +74,7 @@ export const INTEGRATION_AGENTS: AgentTask[] = [
 export const TOGGLEABLE_INTEGRATION_IDS = [
   "integration_resend", "integration_n8n", "integration_vercel", "integration_github",
   "integration_notion", "integration_calcom", "integration_stripe",
+  "integration_telegram",
 ];
 
 /** What an integration poller last reported. */
@@ -213,7 +215,8 @@ class AppState {
   loadIntegrationTasks() {
     for (const proto of INTEGRATION_AGENTS) {
       const shouldLoad =
-        proto.id === "integration_claude" || this.settings.activeIntegrations.includes(proto.id);
+        (proto.id !== "integration_telegram" || this.agentProvider === "codex") &&
+        (proto.id === "integration_claude" || this.settings.activeIntegrations.includes(proto.id));
       const idx = this.tasks.findIndex((t) => t.id === proto.id);
       if (shouldLoad && idx < 0) this.tasks.push({ ...proto, name: proto.id === "integration_claude" ? this.agentAppLabel : proto.name, steps: [] });
       if (!shouldLoad && idx >= 0) this.tasks.splice(idx, 1);
@@ -221,12 +224,13 @@ class AppState {
     // Keep the declared order so pills never shuffle.
     const order = INTEGRATION_AGENTS.map((t) => t.id);
     this.tasks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-    if (!this.focusId) this.focusId = "integration_claude";
+    if (!this.tasks.some((task) => task.id === this.focusId)) this.focusId = "integration_claude";
     this.notify();
   }
 
   toggleIntegration(id: string) {
     if (id === "integration_claude") return;
+    if (id === "integration_telegram" && this.agentProvider !== "codex") return;
     const active = this.settings.activeIntegrations;
     if (active.includes(id)) {
       this.settings.activeIntegrations = active.filter((x) => x !== id);

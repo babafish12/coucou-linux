@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
+import type { TelegramNotification } from "../telegram/api";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -98,6 +99,9 @@ export const Bridge = {
 
   // ── Integrations ──────────────────────────────────────────────────────────
   refreshIntegration: (id: string) => call<void>("refresh_integration", { id }),
+  /** Cached Telegram status, unread totals and fresh notification previews. */
+  telegramSummary: () => callOrThrow<TelegramSummary>("telegram_summary"),
+  openTelegramWindow: () => callOrThrow<void>("open_telegram_window"),
   /** Opens the configured n8n instance in the browser. */
   openN8n: () => call<void>("open_n8n"),
 
@@ -110,6 +114,19 @@ export interface IntegrationUpdate {
   data: Record<string, unknown>;
   error: string | null;
   event: { success: boolean; label: string; detail: string | null } | null;
+}
+
+export interface TelegramSummary {
+  state: string;
+  configured: boolean;
+  runtimeAvailable: boolean;
+  paused: boolean;
+  accountName?: string | null;
+  message?: string | null;
+  error?: string | null;
+  unreadCount: number | null;
+  unreadChatCount: number | null;
+  notifications?: TelegramNotification[];
 }
 
 export interface CodexModel {
