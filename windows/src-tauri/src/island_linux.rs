@@ -6,13 +6,13 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gtk::cairo::{RectangleInt, Region};
 use gtk::gdk::WindowTypeHint;
 use gtk::glib::translate::ToGlibPtr;
 use gtk::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Monitor, PhysicalPosition, WebviewWindow};
 
 pub const PANEL_W: f64 = 720.0;
@@ -150,23 +150,25 @@ pub fn apply_geometry(app: &AppHandle, pref: &str, collapsed: bool) {
     };
     let anchor = WindowAnchor {
         x: monitor.position().x,
-        y: hyprland_top_edge(&monitor)
-            .unwrap_or_else(|| monitor.work_area().position.y.max(monitor.position().y)),
+        // The island occupies the free centre of the panel at the screen edge.
+        y: monitor.position().y,
         width: monitor.size().width,
         scale: monitor.scale_factor(),
+        monitor_name: monitor.name().cloned(),
     };
     let shared = app.state::<crate::Shared>();
-    *shared.gate.anchor.lock().unwrap() = Some(anchor);
+    *shared.gate.anchor.lock().unwrap() = Some(anchor.clone());
     let size = native_size(*shared.gate.rect.lock().unwrap(), collapsed);
     apply_native_geometry(&win, anchor, size);
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct WindowAnchor {
     x: i32,
     y: i32,
     width: u32,
     scale: f64,
+    monitor_name: Option<String>,
 }
 
 fn native_size(rect: IslandRect, collapsed: bool) -> (i32, i32) {
@@ -195,23 +197,6 @@ fn apply_native_geometry(win: &WebviewWindow, anchor: WindowAnchor, size: (i32, 
     });
 }
 
-// Wayland panels are above XWayland windows, and Hyprland does not expose their
-// reserved space through X11's _NET_WORKAREA. Query its local IPC only when
-// applying geometry, so the invisible wake strip stays just below the panel.
-fn hyprland_top_edge(monitor: &Monitor) -> Option<i32> {
-    let bytes = hyprland_request("j/monitors")?;
-    let monitors = serde_json::from_slice::<serde_json::Value>(&bytes).ok()?;
-    let scale = monitor.scale_factor();
-    let offset = hyprland_top_offset(
-        &monitors,
-        monitor.name().map(String::as_str),
-        monitor.position().x as f64 / scale,
-        monitor.position().y as f64 / scale,
-    )?;
-    (offset < monitor.size().height as f64 / scale)
-        .then(|| monitor.position().y + (offset * scale).round() as i32)
-}
-
 fn hyprland_request(command: &str) -> Option<Vec<u8>> {
     let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
     let instance = std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE")?;
@@ -232,23 +217,105 @@ fn hyprland_request(command: &str) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-fn hyprland_top_offset(
-    monitors: &serde_json::Value,
-    name: Option<&str>,
+#[derive(Deserialize)]
+struct HyprlandPointer {
     x: f64,
     y: f64,
-) -> Option<f64> {
-    let monitors = monitors.as_array()?;
-    let monitor = monitors
-        .iter()
-        .find(|monitor| name.is_some() && monitor["name"].as_str() == name)
-        .or_else(|| {
-            monitors.iter().find(|monitor| {
-                monitor["x"].as_f64() == Some(x) && monitor["y"].as_f64() == Some(y)
-            })
-        })?;
-    let top = monitor["reserved"][1].as_f64()?;
-    (top.is_finite() && top >= 0.0).then_some(top)
+}
+
+#[derive(Deserialize)]
+struct HyprlandMonitor {
+    name: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    scale: f64,
+    transform: u8,
+}
+
+fn hyprland_island_cursor(
+    pointer: HyprlandPointer,
+    monitors: &[HyprlandMonitor],
+    anchor: &WindowAnchor,
+) -> Option<(f64, f64)> {
+    let name = anchor.monitor_name.as_deref()?;
+    let monitor = monitors.iter().find(|monitor| monitor.name == name)?;
+    if ![
+        pointer.x,
+        pointer.y,
+        monitor.x,
+        monitor.y,
+        monitor.width,
+        monitor.height,
+        monitor.scale,
+        anchor.scale,
+    ]
+    .iter()
+    .all(|value| value.is_finite())
+        || monitor.width <= 0.0
+        || monitor.height <= 0.0
+        || monitor.scale <= 0.0
+        || anchor.width == 0
+        || anchor.scale <= 0.0
+        || monitor.transform > 7
+    {
+        return None;
+    }
+    // Hyprland reports global logical coordinates, while XWayland may arrange
+    // and scale outputs differently. Match the GTK output by name, then map its
+    // logical width into our centred 720px canvas, independent of window size.
+    let width = if monitor.transform % 2 == 1 {
+        monitor.height
+    } else {
+        monitor.width
+    };
+    let logical_width = (width / monitor.scale).round();
+    if logical_width <= 0.0 || !logical_width.is_finite() {
+        return None;
+    }
+    let factor = anchor.width as f64 / anchor.scale / logical_width;
+    let x = PANEL_W / 2.0 + (pointer.x - monitor.x - logical_width / 2.0) * factor;
+    let y = (pointer.y - monitor.y) * factor;
+    (x.is_finite() && y.is_finite()).then_some((x, y))
+}
+
+struct HyprlandCursor {
+    monitors: Vec<HyprlandMonitor>,
+    refresh_at: Instant,
+    retry_at: Instant,
+}
+
+impl HyprlandCursor {
+    fn new() -> Self {
+        Self {
+            monitors: Vec::new(),
+            refresh_at: Instant::now(),
+            retry_at: Instant::now(),
+        }
+    }
+
+    fn sample(&mut self, anchor: &WindowAnchor) -> Option<(f64, f64)> {
+        let now = Instant::now();
+        if now < self.retry_at {
+            return None;
+        }
+        let cursor = self.read_cursor(anchor, now);
+        if cursor.is_none() {
+            // A missing/stalled compositor must not delay every cursor tick.
+            self.retry_at = Instant::now() + Duration::from_millis(500);
+        }
+        cursor
+    }
+
+    fn read_cursor(&mut self, anchor: &WindowAnchor, now: Instant) -> Option<(f64, f64)> {
+        if now >= self.refresh_at {
+            self.monitors = serde_json::from_slice(&hyprland_request("j/monitors")?).ok()?;
+            self.refresh_at = now + Duration::from_millis(500);
+        }
+        let pointer = serde_json::from_slice(&hyprland_request("j/cursorpos")?).ok()?;
+        hyprland_island_cursor(pointer, &self.monitors, anchor)
+    }
 }
 
 pub fn make_non_activating(win: &WebviewWindow) {
@@ -507,7 +574,12 @@ struct PollState {
     ticks: u32,
 }
 
-fn poll_tick(app: &AppHandle, gate: &PollGate, state: &Mutex<PollState>) {
+fn poll_tick(
+    app: &AppHandle,
+    gate: &PollGate,
+    state: &Mutex<PollState>,
+    compositor_cursor: Option<(f64, f64)>,
+) {
     if !gate.is_active() {
         return;
     }
@@ -519,21 +591,19 @@ fn poll_tick(app: &AppHandle, gate: &PollGate, state: &Mutex<PollState>) {
     if (native.width(), native.height()) != size {
         // Coalesce frontend animation updates in the existing 60Hz poll. The
         // monitor anchor is cached; resizing does not query compositor IPC.
-        if let Some(anchor) = *gate.anchor.lock().unwrap() {
+        if let Some(anchor) = gate.anchor.lock().unwrap().clone() {
             apply_native_geometry(&win, anchor, size);
         }
     }
-    let Some(pointer) = native
-        .display()
-        .default_seat()
-        .and_then(|seat| seat.pointer())
-    else {
+    let cursor = compositor_cursor.or_else(|| {
+        let pointer = native.display().default_seat()?.pointer()?;
+        let (_, local_x, y, _) = native.device_position_double(&pointer);
+        // Keep the GDK path for X11 and other compositors.
+        Some((local_x + (PANEL_W - native.width() as f64) / 2.0, y))
+    });
+    let Some((x, y)) = cursor else {
         return;
     };
-    let (_, local_x, y, _) = native.device_position_double(&pointer);
-    // The frontend keeps its original 720px virtual canvas coordinates while
-    // GTK's viewport now follows the visible island's width.
-    let x = local_x + (PANEL_W - native.width() as f64) / 2.0;
     // A button held over another application must never enlarge our region.
     // GTK already delivers native drag/drop events on the island itself.
     let shape = current_input_shape(gate, &native);
@@ -579,18 +649,27 @@ fn poll_tick(app: &AppHandle, gate: &PollGate, state: &Mutex<PollState>) {
 pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
     std::thread::spawn(move || {
         let state = Arc::new(Mutex::new(PollState::default()));
+        let mut hyprland_cursor =
+            std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").map(|_| HyprlandCursor::new());
         loop {
             gate.wait_until_active();
             while gate.is_active() {
                 // GTK must be accessed on its main thread. Keep at most one tick
                 // queued if the UI is busy, and park entirely while collapsed.
                 if !gate.tick_pending.swap(true, Ordering::Relaxed) {
+                    // XWayland can retain an old pointer position while native
+                    // Wayland clients have focus, including on other workspaces.
+                    // Query Hyprland off the GTK thread and only while visible.
+                    let anchor = gate.anchor.lock().unwrap().clone();
+                    let cursor = hyprland_cursor.as_mut().and_then(|source| {
+                        anchor.as_ref().and_then(|anchor| source.sample(anchor))
+                    });
                     let handle = app.clone();
                     let tick_gate = gate.clone();
                     let tick_state = state.clone();
                     if app
                         .run_on_main_thread(move || {
-                            poll_tick(&handle, &tick_gate, &tick_state);
+                            poll_tick(&handle, &tick_gate, &tick_state, cursor);
                             tick_gate.tick_pending.store(false, Ordering::Relaxed);
                         })
                         .is_err()
@@ -625,6 +704,168 @@ pub fn set_ignore_cursor(app: &AppHandle, ignore: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn cursor_anchor(width: u32, scale: f64) -> WindowAnchor {
+        WindowAnchor {
+            // XWayland positions need not match Hyprland's monitor arrangement.
+            x: 4096,
+            y: 0,
+            width,
+            scale,
+            monitor_name: Some("DP-1".into()),
+        }
+    }
+
+    fn cursor_monitors() -> Vec<HyprlandMonitor> {
+        serde_json::from_value(serde_json::json!([
+            {
+                "name": "eDP-1", "x": 0, "y": 0, "width": 1920,
+                "height": 1080, "scale": 1, "transform": 0
+            },
+            {
+                "name": "DP-1", "x": -1920, "y": -120, "width": 3840,
+                "height": 2160, "scale": 2, "transform": 0
+            }
+        ]))
+        .unwrap()
+    }
+
+    #[test]
+    fn hyprland_cursor_uses_island_monitor_and_global_pointer_on_any_workspace() {
+        let monitors = cursor_monitors();
+        let anchor = cursor_anchor(3840, 2.0);
+        // Workspace and focused-client data do not participate in tracking.
+        for (pointer, expected) in [
+            ((-960.0, -120.0), (360.0, 0.0)),
+            ((-860.0, -80.0), (460.0, 40.0)),
+            // Looking toward a pointer on another output still uses our anchor.
+            ((100.0, 80.0), (1420.0, 200.0)),
+        ] {
+            assert_eq!(
+                hyprland_island_cursor(
+                    HyprlandPointer {
+                        x: pointer.0,
+                        y: pointer.1
+                    },
+                    &monitors,
+                    &anchor,
+                ),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn hyprland_cursor_accounts_for_gtk_and_xwayland_scaling() {
+        let monitors = cursor_monitors();
+        for (width, scale, expected) in [
+            (3840, 2.0, (460.0, 40.0)),
+            (1920, 2.0, (410.0, 20.0)),
+            (3840, 1.0, (560.0, 80.0)),
+        ] {
+            assert_eq!(
+                hyprland_island_cursor(
+                    HyprlandPointer {
+                        x: -860.0,
+                        y: -80.0
+                    },
+                    &monitors,
+                    &cursor_anchor(width, scale),
+                ),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn hyprland_cursor_accounts_for_rotation_and_fractional_scale_rounding() {
+        let mut monitors = cursor_monitors();
+        for transform in 0..=7 {
+            monitors[1].transform = transform;
+            monitors[1].scale = 1.5;
+            let width = if transform % 2 == 1 { 2160 } else { 3840 };
+            monitors[1].width = 3841.0;
+            let logical_width = if transform % 2 == 1 { 1440.0 } else { 2561.0 };
+            assert_eq!(
+                hyprland_island_cursor(
+                    HyprlandPointer {
+                        x: -1920.0 + logical_width / 2.0,
+                        y: -120.0
+                    },
+                    &monitors,
+                    &cursor_anchor(width, 1.0),
+                ),
+                Some((360.0, 0.0))
+            );
+        }
+    }
+
+    #[test]
+    fn hyprland_cursor_falls_back_for_unknown_output_or_invalid_geometry() {
+        let mut monitors = cursor_monitors();
+        let anchor = cursor_anchor(3840, 2.0);
+        let sample = |monitors: &[HyprlandMonitor], anchor: &WindowAnchor| {
+            hyprland_island_cursor(HyprlandPointer { x: 0.0, y: 0.0 }, monitors, anchor)
+        };
+        assert_eq!(sample(&[], &anchor), None);
+        assert_eq!(
+            sample(
+                &monitors,
+                &WindowAnchor {
+                    monitor_name: None,
+                    ..anchor.clone()
+                }
+            ),
+            None
+        );
+        assert_eq!(
+            sample(
+                &monitors,
+                &WindowAnchor {
+                    monitor_name: Some("missing".into()),
+                    ..anchor.clone()
+                }
+            ),
+            None
+        );
+        assert_eq!(sample(&monitors, &cursor_anchor(0, 1.0)), None);
+        for scale in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(sample(&monitors, &cursor_anchor(3840, scale)), None);
+            monitors[1].scale = scale;
+            assert_eq!(sample(&monitors, &anchor), None);
+        }
+        monitors[1].scale = 2.0;
+        monitors[1].transform = 8;
+        assert_eq!(sample(&monitors, &anchor), None);
+        monitors[1].transform = 0;
+        monitors[1].width = 0.1;
+        assert_eq!(sample(&monitors, &anchor), None);
+        assert_eq!(
+            hyprland_island_cursor(
+                HyprlandPointer {
+                    x: f64::NAN,
+                    y: 0.0
+                },
+                &cursor_monitors(),
+                &anchor
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn hyprland_cursor_rejects_invalid_ipc_responses() {
+        for response in [
+            "unknown request",
+            "{}",
+            "{\"x\":1}",
+            "{\"x\":\"1\",\"y\":2}",
+        ] {
+            assert!(serde_json::from_str::<HyprlandPointer>(response).is_err());
+        }
+        let pointer: HyprlandPointer = serde_json::from_str("{\"x\":-120,\"y\":42}").unwrap();
+        assert_eq!((pointer.x, pointer.y), (-120.0, 42.0));
+    }
 
     #[test]
     fn native_bounds_follow_compact_and_expanded_content() {
@@ -708,23 +949,6 @@ mod tests {
             { "pid": 42, "title": "Coucou", "address": "0xabc'; command()" }
         ]);
         assert_eq!(hyprland_island_client(&invalid, 42, "Coucou"), None);
-    }
-
-    #[test]
-    fn hyprland_reserved_top_is_selected_per_monitor() {
-        let monitors = serde_json::json!([
-            { "name": "eDP-1", "x": 0, "y": 0, "reserved": [0, 37, 0, 0] },
-            { "name": "DP-1", "x": 1920, "y": 0, "reserved": [0, 24, 0, 0] }
-        ]);
-        assert_eq!(
-            hyprland_top_offset(&monitors, Some("eDP-1"), 0.0, 0.0),
-            Some(37.0)
-        );
-        assert_eq!(
-            hyprland_top_offset(&monitors, None, 1920.0, 0.0),
-            Some(24.0)
-        );
-        assert_eq!(hyprland_top_offset(&monitors, None, 9000.0, 0.0), None);
     }
 
     #[test]

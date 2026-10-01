@@ -106,10 +106,19 @@ width and height follow the visible island, including during animations. This
 avoids a large transparent input area on compositors such as Hyprland that select
 XWayland windows by their full bounds rather than their X11 input mask. While
 hidden, only the 240×6 wake strip remains and cursor polling stops.
-On Hyprland, it sits below the reserved top panel and applies temporary window
+The island sits at the monitor's top edge, centred horizontally, including when
+a panel reserves space along that edge. On Hyprland it applies temporary window
 properties to prevent background blur and keep the island on all workspaces.
+Mochi's eyes use Hyprland's global pointer position, so they keep following the
+mouse across workspace changes and while native Wayland applications have focus.
+The compositor is queried on a background thread while the island is visible;
+other desktops or unavailable Hyprland IPC fall back to GTK pointer tracking.
 It does not edit your Hyprland configuration or reserve screen space. Other
 compositors may apply their own dock, panel, workspace or fullscreen policies.
+If DankMaterialShell has a transparent bar with an empty centre, enable its
+**Click Through** option so the bar's empty area does not intercept island clicks.
+DMS 1.6.2 still leaves a roughly four-pixel input strip at the exact centre when
+the middle widget group is empty; adjacent island controls remain clickable.
 
 ## Paths
 

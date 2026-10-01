@@ -106,7 +106,7 @@ CLI change. Quit from the system tray menu.
   Monitoring reads local session logs, whose format may change with Codex updates.
 - PDF and other unsupported binary attachments report an error.
 - The positioned island requires X11/XWayland. Native Wayland positioning is not
-  supported. On Hyprland it sits below the reserved top panel; when hidden, a
+  supported. The island sits at the top edge in the centre of the display; when hidden, a
   small 240×6 wake strip remains. Other compositors may apply different window
   policies. See [Linux window support](docs/LINUX.md#linux-window-support).
 
