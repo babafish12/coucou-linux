@@ -60,6 +60,14 @@ class Element {
     }
     return null;
   }
+  querySelectorAll(selector) {
+    const found = [];
+    for (const child of this.children) {
+      if (selector === "details[open]" && child.tagName === "details" && child.open) found.push(child);
+      found.push(...child.querySelectorAll(selector));
+    }
+    return found;
+  }
   addEventListener(name, callback) {
     const listeners = this.listeners.get(name) ?? [];
     listeners.push(callback);

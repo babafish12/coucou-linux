@@ -11,6 +11,8 @@ mod codex_monitor;
 #[cfg(target_os = "linux")]
 mod codex_navigation;
 #[cfg(target_os = "linux")]
+mod codex_window;
+#[cfg(target_os = "linux")]
 mod autostart_linux;
 mod encoding;
 mod files;
@@ -285,6 +287,20 @@ struct HookStatus {
 #[tauri::command]
 fn codex_monitor_ready(app: AppHandle) {
     codex_monitor::start(app);
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn codex_activity() -> codex_monitor::ActivitySnapshot {
+    codex_monitor::snapshot()
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn focus_codex_window(cwd: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || codex_window::focus(cwd.as_deref()))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[cfg(target_os = "linux")]
@@ -648,6 +664,10 @@ pub fn run() {
             codex_set_preferences,
             #[cfg(target_os = "linux")]
             codex_monitor_ready,
+            #[cfg(target_os = "linux")]
+            codex_activity,
+            #[cfg(target_os = "linux")]
+            focus_codex_window,
             chat_send,
             #[cfg(target_os = "linux")]
             chat_warmup,

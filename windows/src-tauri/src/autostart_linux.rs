@@ -23,11 +23,24 @@ pub fn enabled() -> bool {
 pub fn set(enabled: bool) -> Result<(), String> {
     let path = entry_path(&crate::settings::config_dir());
     if enabled {
-        let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+        let current = std::env::current_exe().map_err(|e| e.to_string())?;
+        let executable = autostart_executable(std::env::var_os("HOME").as_deref().map(Path::new), &current);
         write_entry(&path, &executable)
     } else {
         remove_entry(&path)
     }
+}
+
+fn autostart_executable(home: Option<&Path>, current: &Path) -> PathBuf {
+    if let Some(home) = home {
+        let launcher = home.join(".local/bin/coucou");
+        if fs::read_to_string(&launcher)
+            .is_ok_and(|source| source.lines().any(|line| line == "# Coucou managed launcher v1"))
+        {
+            return launcher;
+        }
+    }
+    current.to_path_buf()
 }
 
 fn remove_entry(path: &Path) -> Result<(), String> {
@@ -124,6 +137,18 @@ mod tests {
             TEMP_ID.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&root).unwrap();
+        let current = Path::new("/checkout/target/release/coucou");
+        assert_eq!(autostart_executable(None, current), current);
+        assert_eq!(autostart_executable(Some(&root), current), current);
+        let launcher = root.join(".local/bin/coucou");
+        fs::create_dir_all(launcher.parent().unwrap()).unwrap();
+        fs::write(&launcher, "#!/bin/sh\n# unrelated launcher\n").unwrap();
+        assert_eq!(autostart_executable(Some(&root), current), current);
+        fs::write(&launcher, "#!/bin/sh\n# Coucou managed launcher v1\n").unwrap();
+        assert_eq!(autostart_executable(Some(&root), current), launcher);
+        fs::remove_file(&launcher).unwrap();
+        fs::remove_dir(launcher.parent().unwrap()).unwrap();
+        fs::remove_dir(root.join(".local")).unwrap();
         let path = root.join("Coucou.desktop");
         let other = root.join("other.desktop");
         fs::write(&other, "preserved").unwrap();

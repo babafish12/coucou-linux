@@ -57,9 +57,9 @@ For paths, configuration, and more setup details, see the
 
 ## Features
 
-- **Local Codex activity:** shows work, tool names, and completion from local
-  interactive CLI and desktop sessions. With concurrent sessions, the most
-  recently active session is shown.
+- **Local Codex activity:** open the Codex card to browse local sessions with
+  public progress messages, concrete tool actions, timestamps and completion.
+  The corner arrow focuses the Codex desktop window.
 - **Chat with your Codex account:** ask questions from the island using the
   locally installed CLI and its saved login. Responses stream as they arrive;
   a warm, persistent connection avoids starting a process for every message.
@@ -160,9 +160,15 @@ git pull --ff-only
 ./scripts/install-linux.sh
 ```
 
-Quit the running app through its tray menu and launch **Coucou** again to use the
-new build. Reinstalling without `--autostart` leaves an existing startup entry
+Launch **Coucou** again to use the new build. The launcher replaces a verified
+older running build automatically. Reinstalling without `--autostart` leaves an existing startup entry
 unchanged; disable startup in settings if you no longer want it.
+
+For local development, `./scripts/install-linux.sh --skip-build --link-build`
+makes the **Coucou** application entry follow this checkout's latest release
+build, with the installed copy as a fallback. Subsequent rebuilds only require
+opening Coucou from app search again. This choice survives later installer runs;
+use `--copy-build` to return to the installed copy.
 
 ## Development and contributing
 
@@ -178,6 +184,7 @@ cd windows
 npm ci
 npm run build
 node scripts/test-island-performance.mjs
+node scripts/test-codex-activity.mjs
 node scripts/test-telegram-inline.mjs
 cargo test --workspace
 npm run tauri -- dev
@@ -197,8 +204,9 @@ verification on a real desktop.
 The island tests use controlled clocks to check rendering, idle wakeups and
 auto-close behavior. With `npm run dev`, open
 `http://127.0.0.1:1420/dev/performance-preview.html` for local render measurements,
-`/dev/chat-preview.html` for streaming, approval and Stop fixtures, or
-`/dev/telegram-preview.html` for Telegram chat and notification fixtures. These previews
+`/dev/chat-preview.html` for streaming, approval and Stop fixtures,
+`/dev/telegram-preview.html` for Telegram chat and notification fixtures, or
+`/dev/codex-preview.html` for Codex activity. These previews
 use no account and send no messages. Frame callback timings measure JavaScript
 work, not native WebKit/compositor CPU or GPU time.
 

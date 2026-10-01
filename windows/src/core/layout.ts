@@ -17,6 +17,7 @@ export type IslandViewName =
   | "choose"
   | "mail"
   | "prompt"
+  | "codex"
   | "telegram"
   | "telegram-notification"
   | "searching"
@@ -83,6 +84,7 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   choose: { height: 176, botX: 60, botY: 101, botDiameter: 52, agentMode: "column" },
   mail: { height: 240, botX: 56, botY: null, botDiameter: 46, agentMode: "column" },
   prompt: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
+  codex: { height: 300, botX: 38, botY: 66, botDiameter: 22, agentMode: "none" },
   telegram: { height: 300, botX: 38, botY: 66, botDiameter: 22, agentMode: "none" },
   "telegram-notification": { height: 220, botX: 62, botY: null, botDiameter: 56, agentMode: "none" },
   searching: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
