@@ -13,6 +13,7 @@ mod integrations;
 #[path = "island_linux.rs"]
 mod island;
 mod log;
+mod private_fs;
 mod secrets;
 mod settings;
 mod telegram;

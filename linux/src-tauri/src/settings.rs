@@ -1,6 +1,7 @@
 // Preferences live in the platform config directory. Secrets use the system keyring.
 
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,10 +79,10 @@ pub fn load() -> Settings {
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
     let dir = config_dir();
-    std::fs::create_dir_all(&dir)?;
+    crate::private_fs::ensure_private_dir(&dir)?;
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    std::fs::write(settings_path(), json)
+    crate::private_fs::open_private_file(&settings_path(), false)?.write_all(&json)
 }
 
 #[cfg(test)]
