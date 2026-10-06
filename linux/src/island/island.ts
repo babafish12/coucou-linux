@@ -121,9 +121,9 @@ export class Island {
         State.setFocus(id);
         Sound.play("blip");
       },
-      openSession: async () => {
+      openSession: async (requestedSessionId) => {
         const task = State.focusTask;
-        const sessionId = task?.sessionId;
+        const sessionId = requestedSessionId ?? task?.sessionId;
         if (!sessionId) throw new Error("No Codex chat is available for this session yet.");
         await Bridge.openCodexSession(sessionId);
         if (State.view === "finished" && State.focusTask?.sessionId === sessionId) this.collapse();
@@ -165,7 +165,7 @@ export class Island {
       },
       setAutoClose: (s) => {
         State.settings.autoCloseInterval = s;
-        this.fsm.homeToPetitDelay = s;
+        this.fsm.configure(State.settings);
         void Bridge.saveSettings(State.settings);
         State.notify();
       },
@@ -228,7 +228,7 @@ export class Island {
   // ── FSM ─────────────────────────────────────────────────────────────────────
 
   private wireFsm() {
-    this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
+    this.fsm.configure(State.settings);
     this.fsm.onDeadlineChanged = () => this.ensureRunning();
     this.fsm.onTransition = (from, to) => {
       switch (to) {
@@ -572,11 +572,18 @@ export class Island {
   private wireInput() {
     // The wake strip is the only thing the OS can hit while the island is hidden.
     this.wakeStrip.addEventListener("mouseenter", () => {
+      if (State.paused) return;
       Sound.resume();
       if (State.mode === "hidden") {
         this.wasInIsland = true;
         this.fsm.mouseEntered();
       }
+    });
+    this.wakeStrip.addEventListener("mousedown", () => {
+      if (State.paused) return;
+      Sound.resume();
+      this.wasInIsland = true;
+      this.fsm.click();
     });
 
     this.islandEl.addEventListener("mousedown", (e) => {
@@ -594,6 +601,22 @@ export class Island {
     });
 
     window.addEventListener("keydown", (e) => {
+      // Local equivalents of upstream's island shortcuts. The resting Linux
+      // dock deliberately does not take keyboard focus or register global keys.
+      if (!State.paused && State.mode === "expanded" && !State.isPinned &&
+          (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && !e.repeat && !e.isComposing) {
+        if (e.key === ",") {
+          e.preventDefault();
+          void Bridge.openSettingsWindow();
+        } else if (/^[1-5]$/.test(e.key)) {
+          const task = State.tasks[Number(e.key) - 1];
+          if (task) {
+            e.preventDefault();
+            State.setFocus(task.id);
+            this.setView(State.defaultView());
+          }
+        }
+      }
       if (e.key === "Escape" && State.mode === "expanded" && !State.isPinned) this.collapse();
       State.lastActivity = performance.now();
     });
@@ -609,6 +632,7 @@ export class Island {
 
   /** Backend cursor events already use virtual panel coordinates. */
   onCursor(x: number, y: number) {
+    if (State.paused) return;
     State.mouse = { x, y };
     const rect = this.islandRect();
     State.mouseInIsland = { x: x - rect.x, y: y - rect.y };
@@ -1006,11 +1030,13 @@ export class Island {
     this.engine.setState(State.effectiveState);
   }
 
-  /** Applies settings coming from Rust at boot. */
+  /** Apply preferences at boot and while the settings window is open. */
   applySettings() {
     Sound.setEnabled(State.settings.soundEnabled);
     Sound.setVolume(State.settings.soundVolume);
-    this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
+    const wasAutoHidden = this.fsm.autoHideEnabled && State.mode === "hidden";
+    this.fsm.configure(State.settings);
+    if (wasAutoHidden && !State.settings.autoHideEnabled && !State.paused) this.fsm.reveal();
     State.notify();
   }
 

@@ -226,3 +226,94 @@ test("revealing or closing to compact never schedules automatic hiding", async (
   fsm.forceHidden();
   assert.equal(fsm.state, "hidden", "explicit pause can still hide the island");
 });
+
+test("click activation reveals compact on hover and expands only on click", async (t) => {
+  const { fsm, advance } = await setup(t);
+  fsm.activationMode = "click";
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "petit");
+  advance(60_000);
+  assert.equal(fsm.state, "petit");
+  fsm.click();
+  assert.equal(fsm.state, "home");
+  fsm.mouseLeft();
+  advance(fsm.homeToPetitDelay * 1000);
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "petit");
+});
+
+test("optional auto-hide starts after compact, cancels on hover, and restarts on leaving", async (t) => {
+  const { fsm, timers, advance } = await setup(t);
+  fsm.activationMode = "click";
+  fsm.autoHideEnabled = true;
+  fsm.autoHideInterval = 3;
+  fsm.forcePetit();
+  advance(2999);
+  assert.equal(fsm.state, "petit");
+  fsm.mouseEntered();
+  assert.equal(timers.size, 0);
+  advance(10_000);
+  assert.equal(fsm.state, "petit");
+  fsm.mouseLeft();
+  advance(3000);
+  assert.equal(fsm.state, "hidden");
+  assert.equal(timers.size, 0);
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "petit");
+});
+
+test("auto-hide waits for Home to collapse and leaves pinned views alone", async (t) => {
+  const { fsm, advance } = await setup(t);
+  fsm.autoHideEnabled = true;
+  fsm.autoHideInterval = 2;
+  fsm.homeToPetitDelay = 1;
+  fsm.forceHome();
+  fsm.pinned = true;
+  fsm.mouseLeft();
+  advance(60_000);
+  assert.equal(fsm.state, "home");
+  fsm.pinned = false;
+  fsm.mouseLeft();
+  advance(1000);
+  assert.equal(fsm.state, "petit");
+  advance(2000);
+  assert.equal(fsm.state, "hidden");
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "home");
+});
+
+test("live preferences replace pending hide timers and disabling cancels them", async (t) => {
+  const { fsm, timers, advance } = await setup(t);
+  const preferences = { activationMode: "hover", autoCloseInterval: 15, autoHideEnabled: true, autoHideInterval: 2 };
+  fsm.configure(preferences);
+  fsm.reveal();
+  advance(1000);
+  fsm.configure({ ...preferences, autoHideInterval: 5 });
+  advance(2000);
+  assert.equal(fsm.state, "petit");
+  fsm.configure({ ...preferences, autoHideEnabled: false });
+  assert.equal(timers.size, 0);
+  advance(60_000);
+  assert.equal(fsm.state, "petit");
+});
+
+test("background activity cannot reveal an auto-hidden island; hover and alerts can", async (t) => {
+  const { fsm, advance } = await setup(t);
+  fsm.autoHideEnabled = true;
+  fsm.autoHideInterval = 1;
+  fsm.reveal();
+  advance(1000);
+  fsm.reveal();
+  advance(1000);
+  assert.equal(fsm.state, "hidden");
+  fsm.mouseEntered();
+  assert.equal(fsm.state, "home");
+  fsm.mouseLeft();
+  advance((fsm.homeToPetitDelay + 1) * 1000);
+  assert.equal(fsm.state, "hidden");
+  fsm.forceHome();
+  assert.equal(fsm.state, "home");
+  fsm.forceHidden();
+  fsm.reveal();
+  assert.equal(fsm.state, "petit", "resuming an explicit pause must still reveal compact");
+});

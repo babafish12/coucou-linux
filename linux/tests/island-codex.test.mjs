@@ -74,3 +74,17 @@ test("unchanged Codex snapshots do not wake rendering", async (t) => {
   app.advance(1000);
   assert.equal(app.frames.size, 0);
 });
+
+test("activity opens the selected chat even when another session owns the Home card", async (t) => {
+  const app = await setupIsland(t);
+  const opened = [];
+  t.mock.method(app.Bridge, "openCodexSession", async (id) => { opened.push(id); });
+  app.CodexActivity.apply({ sessions: [session, { ...session, id: "older-session", updatedAt: 500, state: "finished" }] });
+  app.CodexActivity.select("older-session");
+  app.island.alert("codex");
+  app.advance(500);
+  app.island.views.get("codex").el.querySelector(".codex-open").dispatch("click");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(opened, ["older-session"]);
+  assert.equal(app.State.view, "codex");
+});

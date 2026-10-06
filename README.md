@@ -57,9 +57,11 @@ For paths, configuration, and more setup details, see the
 
 ## Features
 
-- **Local Codex activity:** open the Codex card to browse local sessions with
-  public progress messages, concrete tool actions, timestamps and completion.
-  The corner arrow focuses the Codex desktop window.
+- **Local Codex activity:** open the Codex card to see the current task, latest
+  progress and action, with active chats grouped above recent ones. Switch to
+  **Activity** for the history and use **Open chat** for the selected session.
+  The corner arrow switches to the Codex desktop workspace without moving the
+  mouse pointer.
 - **Chat with your Codex account:** ask questions from the island using the
   locally installed CLI and its saved login. Responses stream as they arrive;
   a warm, persistent connection avoids starting a process for every message.
@@ -81,6 +83,9 @@ For paths, configuration, and more setup details, see the
   island's dimensions, including during animations. Collapsing it also shrinks
   the actual window, so it does not retain a large invisible area that blocks
   the application behind it.
+- **Choose how it opens:** expand on hover or only on click. Optionally hide
+  the compact island after a configurable delay and bring it back by hovering
+  at the top centre of the display.
 - **Mochi animations and sounds:** the character and island UI are shared with
   the original project.
 - **Optional integrations:** service integrations start disabled. Their
@@ -90,7 +95,8 @@ For paths, configuration, and more setup details, see the
 
 ## Use it
 
-Hover over the island at the top centre of your main display to open it directly.
+Hover over the island at the top centre of your main display to open it directly,
+or choose **Settings → General → Open the island → Click**.
 Start a local Codex session to see its activity, open chat to ask a
 question, or drop a supported file onto the island for context.
 
@@ -105,6 +111,17 @@ Codex model and reasoning dropdowns. Choose **Codex default** and **Model defaul
 to follow the catalog's defaults, or select explicit values. Choices apply to
 the next chat reply. **Refresh models** reloads the catalog after an account or
 CLI change. Quit from the system tray menu.
+
+**General → Hide when idle** optionally hides the compact island after the
+chosen number of seconds (off by default). **Auto-close** controls the separate
+delay before an expanded island returns to compact. Hover at the top centre to
+bring a hidden island back; in Click mode it first appears compact. Open chats
+and approvals stay visible, and new alerts can still appear. Background work
+leaves an auto-hidden island hidden. Preferences apply immediately and survive restart.
+
+When the island has keyboard focus (for example while typing in chat),
+**Ctrl+,** opens settings and **Ctrl+1–5** selects a Home integration. These are
+local shortcuts; pending approvals block navigation shortcuts.
 
 ### Connect Telegram
 

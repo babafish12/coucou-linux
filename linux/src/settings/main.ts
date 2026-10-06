@@ -9,6 +9,7 @@ import { Telegram, telegramStatusLabel } from "../telegram/api";
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let version = "";
 let syncIntegrationControls = () => {};
+let syncGeneralControls = () => {};
 
 const root = document.getElementById("settings-root")!;
 
@@ -23,6 +24,7 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   el.addEventListener("click", () => {
     const next = !el.classList.contains("on");
     el.classList.toggle("on", next);
+    el.setAttribute("aria-pressed", String(next));
     onChange(next);
   });
   return el;
@@ -344,6 +346,33 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 // ── General section ───────────────────────────────────────────────────────────
 
 function generalSection(): HTMLElement {
+  const activation = h("select", { id: "island-activation" }) as HTMLSelectElement;
+  activation.append(
+    h("option", { value: "hover", text: "Hover" }),
+    h("option", { value: "click", text: "Click" }),
+  );
+  activation.addEventListener("change", () => {
+    settings.activationMode = activation.value === "click" ? "click" : "hover";
+    void save();
+  });
+  const hideDelay = h("input", {
+    id: "auto-hide-delay", type: "number", min: "1", max: "3600", step: "1",
+    "aria-label": "Seconds before hiding the compact island", style: "width:80px",
+  }) as HTMLInputElement;
+  hideDelay.addEventListener("change", () => {
+    const seconds = hideDelay.valueAsNumber;
+    settings.autoHideInterval = Math.max(1, Math.min(3600,
+      Number.isFinite(seconds) ? seconds : settings.autoHideInterval));
+    hideDelay.value = String(settings.autoHideInterval);
+    void save();
+  });
+  const hideToggle = toggle(settings.autoHideEnabled, (enabled) => {
+    settings.autoHideEnabled = enabled;
+    hideDelay.disabled = !enabled;
+    void save();
+  });
+  hideToggle.id = "auto-hide";
+  hideToggle.setAttribute("aria-label", "Hide when idle");
   const volume = h("input", {
     type: "range", min: "0", max: "0.2", step: "0.005",
     value: String(settings.soundVolume),
@@ -377,10 +406,25 @@ function generalSection(): HTMLElement {
     void save();
   });
 
+  syncGeneralControls = () => {
+    activation.value = settings.activationMode;
+    autoClose.value = String(settings.autoCloseInterval);
+    hideToggle.classList.toggle("on", settings.autoHideEnabled);
+    hideToggle.setAttribute("aria-pressed", String(settings.autoHideEnabled));
+    hideDelay.value = String(settings.autoHideInterval);
+    hideDelay.disabled = !settings.autoHideEnabled;
+  };
+  syncGeneralControls();
+
   return h(
     "section",
     {},
     h("h2", {}, h("span", { text: "General" })),
+    h("div", { class: "row" },
+      h("label", { for: "island-activation", text: "Open the island" }),
+      activation,
+      h("span", { class: "hint", text: "Choose how the compact island opens" }),
+    ),
     h("div", { class: "row" },
       h("label", { text: "Sound" }),
       toggle(settings.soundEnabled, (v) => { settings.soundEnabled = v; void save(); }),
@@ -389,8 +433,15 @@ function generalSection(): HTMLElement {
     h("div", { class: "row" },
       h("label", { for: "auto-close", text: "Auto-close" }),
       autoClose,
-      h("span", { class: "hint", text: "seconds after you leave the island" }),
+      h("span", { class: "hint", text: "seconds after leaving, then stay compact" }),
     ),
+    h("div", { class: "row" },
+      h("label", { for: "auto-hide", text: "Hide when idle" }),
+      hideToggle,
+      hideDelay,
+      h("span", { class: "hint", text: "seconds after becoming compact" }),
+    ),
+    h("p", { class: "hint", text: "When hidden, hover at the top centre of the display to bring it back. In Click mode, this reveals the compact island; click to open it. Open chats and approvals stay visible; new alerts can still appear." }),
     h("div", { class: "row" },
       h("label", { text: "Island lives on" }),
       screen,
@@ -422,10 +473,10 @@ async function main() {
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
+    generalSection(),
     codexSection(status),
     telegramSection(),
     integrationsSection(present),
-    generalSection(),
     h("div", {
       class: "hint",
       text: "No telemetry. Network requests only go to the services you configure yourself.",
@@ -435,6 +486,7 @@ async function main() {
   void onEvent<Settings>("settings-changed", (s) => {
     settings = { ...settings, ...s };
     syncIntegrationControls();
+    syncGeneralControls();
   });
 }
 

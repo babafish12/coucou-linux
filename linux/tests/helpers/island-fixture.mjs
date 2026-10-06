@@ -103,7 +103,11 @@ export async function setupIsland(t, { integrations = [], autoClose = 30 } = {})
     return id;
   };
   globalThis.matchMedia = () => ({ matches: false });
-  globalThis.window = { setTimeout: timeout, clearTimeout, devicePixelRatio: 1, addEventListener() {} };
+  const windowEvents = new Element("window");
+  globalThis.window = {
+    setTimeout: timeout, clearTimeout, devicePixelRatio: 1,
+    addEventListener: (name, callback) => windowEvents.addEventListener(name, callback),
+  };
   globalThis.document = {
     createElement: (tag) => new Element(tag),
     createElementNS: (_, tag) => new Element(tag),
@@ -127,7 +131,7 @@ export async function setupIsland(t, { integrations = [], autoClose = 30 } = {})
   const focus = [];
   app.Bridge.focusWindow = async (on) => { focus.push(on); return null; };
   return {
-    ...app, island, root, draws, focus, frames, timers,
+    ...app, island, root, draws, focus, frames, timers, windowEvents,
     now: () => now,
     advance(milliseconds) {
       const end = now + milliseconds;

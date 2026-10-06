@@ -19,7 +19,7 @@ export interface ViewActions {
   showTelegramNotification(): void;
   collapse(): void;
   setFocus(id: string): void;
-  openSession(): Promise<void>;
+  openSession(sessionId?: string): Promise<void>;
   focusCodex(cwd?: string): Promise<void>;
   /** The ↗ button: opens whatever the focused pill points at. */
   openTarget(): void;
@@ -446,7 +446,8 @@ function buildSettings(actions: ViewActions): ViewHost {
       h("button", {
         class: "link-btn",
         style: "color:#8e939c;font-size:11.5px",
-        text: "Settings…",
+        text: "All settings…",
+        title: "Activation, auto-hide, integrations and Codex",
         onclick: () => actions.openSettingsWindow(),
       }),
     ),

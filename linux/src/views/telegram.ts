@@ -9,12 +9,16 @@ import {
 import { h, svg, dot } from "./dom";
 import { ICONS } from "./icons";
 import type { ViewActions, ViewHost } from "./views";
-import { TelegramNotifications, dismissTelegramNotification } from "../telegram/notifications";
+import { TelegramNotifications, dismissTelegramNotification, selectTelegramNotification } from "../telegram/notifications";
 
 export function buildTelegramNotification(actions: ViewActions): ViewHost {
   let displayedNotification: TelegramNotification | null = null;
   const title = h("b", { class: "tg-alert-title" });
   const sender = h("span", { class: "tg-alert-sender" });
+  const time = h("time", { class: "tg-alert-time" });
+  const count = h("span", { class: "tg-alert-count", role: "status" });
+  const previous = h("button", { class: "tg-alert-nav", title: "Previous message", "aria-label": "Previous Telegram message", onclick: () => selectTelegramNotification(-1) }, svg(ICONS.chevronLeft, 12, { stroke: 2 }));
+  const next = h("button", { class: "tg-alert-nav", title: "Next message", "aria-label": "Next Telegram message", onclick: () => selectTelegramNotification(1) }, svg(ICONS.chevronRight, 12, { stroke: 2 }));
   const text = h("div", { class: "tg-alert-text", tabindex: "0", role: "region", "aria-label": "New Telegram message text", "aria-live": "polite" });
   const reply = h("button", { class: "btn primary", text: "Reply", onclick: () => {
     const notification = displayedNotification;
@@ -26,11 +30,11 @@ export function buildTelegramNotification(actions: ViewActions): ViewHost {
   } });
   const dismiss = h("button", { class: "btn secondary", text: "Dismiss", onclick: () => {
     dismissTelegramNotification();
-    actions.collapse();
+    if (!TelegramNotifications.current) actions.collapse();
   } });
   const body = h("div", { class: "tg-alert-body" },
-    h("div", { class: "tg-alert-heading" }, dot("#59ACD8", 6), h("span", { text: "Telegram" }), title),
-    sender, text, h("div", { class: "actions" }, reply, dismiss),
+    h("div", { class: "tg-alert-heading" }, dot("#59ACD8", 6), h("span", { text: "Telegram" }), count, previous, next),
+    title, h("div", { class: "tg-alert-meta" }, sender, time), text, h("div", { class: "actions" }, reply, dismiss),
   );
   const el = h("div", { class: "view tg-notification" }, h("div", { class: "card tg-card" }, body));
   let shown = "";
@@ -40,8 +44,19 @@ export function buildTelegramNotification(actions: ViewActions): ViewHost {
       const notification = TelegramNotifications.current;
       displayedNotification = notification;
       title.textContent = notification?.chat.title ?? "";
+      title.title = title.textContent;
       sender.textContent = notification?.message.senderName ?? "";
       sender.hidden = !sender.textContent || sender.textContent === title.textContent;
+      const date = new Date((notification?.message.date ?? 0) * 1000);
+      const validDate = Number.isFinite(date.getTime()) && date.getTime() > 0;
+      time.textContent = validDate ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+      if (validDate) { time.dateTime = date.toISOString(); time.title = date.toLocaleString(); }
+      const total = TelegramNotifications.pending.length;
+      const index = TelegramNotifications.pending.findIndex((item) => item.id === notification?.id);
+      count.textContent = total > 1 ? `${index + 1} of ${total}` : "New message";
+      previous.hidden = next.hidden = total < 2;
+      previous.disabled = index <= 0;
+      next.disabled = index < 0 || index >= total - 1;
       text.textContent = notification?.message.text || "New message";
       reply.disabled = !notification || !inlineTelegramReady();
       if (notification && shown !== notification.id) {

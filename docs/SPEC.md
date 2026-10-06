@@ -31,7 +31,7 @@ The logical layout has three modes:
 
 | Mode | Visible size | Behavior |
 | --- | --- | --- |
-| Hidden | No visible island; native 240 × 6 wake strip | Hover wakes the island |
+| Hidden | No visible island; native 240 × 6 wake strip | Hover wakes it expanded or compact according to activation mode |
 | Compact | 288 × 32 | Mochi and the integration indicators remain visible |
 | Expanded | 640 wide, height chosen by the view | Home, Codex activity, chat, files or Telegram |
 
@@ -41,9 +41,14 @@ Display scaling and native window coordinates must remain consistent.
 
 ## Interaction rules
 
-- Hover opens the island immediately. Auto-close returns to the compact island
-  when the pointer leaves; conversation views stay open until closed or changed.
-- Pause can hide the island explicitly. Hidden views must stop their rendering
+- Hover opens the island immediately by default; Click mode requires a click to
+  expand. Auto-close returns to compact after the pointer leaves. Optional
+  auto-hide then hides compact after a separate delay, cancelled while hovering.
+  Conversation views and pending approvals stay open until closed or changed.
+- Hover on the hidden wake strip reveals compact in Click mode and expanded in
+  Hover mode. Background work does not undo auto-hide; new alerts can still open.
+  Preference changes replace or cancel pending timers immediately.
+- Pause hides the island until resumed. Hidden views must stop their rendering
   loops and avoid unnecessary background activity.
 - Mochi follows the pointer, reacts to clicks and long hovers, and animates with
   the active session state. The mini characters share its rendering engine.

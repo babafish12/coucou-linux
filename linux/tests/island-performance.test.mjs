@@ -4,6 +4,91 @@ import { setupIsland } from "./helpers/island-fixture.mjs";
 
 const integrations = ["integration_github", "integration_notion", "integration_vercel", "integration_stripe"];
 
+test("local shortcuts open settings or select a pill without interrupting approvals", async (t) => {
+  const app = await setupIsland(t, { integrations: ["integration_telegram"] });
+  let opened = 0;
+  app.Bridge.openSettingsWindow = async () => { opened++; };
+  const key = (value, extra = {}) => {
+    let prevented = false;
+    app.windowEvents.dispatch("keydown", { key: value, ctrlKey: true, preventDefault: () => { prevented = true; }, ...extra });
+    return prevented;
+  };
+  assert.equal(key(","), false, "hidden island cannot handle keyboard shortcuts");
+  app.island.setView("prompt");
+  assert.equal(key(","), true);
+  assert.equal(opened, 1);
+  assert.equal(key("2"), true);
+  assert.equal(app.State.focusId, "integration_telegram");
+  assert.equal(app.State.view, "overview");
+  assert.equal(key("5"), false, "an unused pill number has no effect");
+  assert.equal(key("1", { altKey: true }), false);
+  assert.equal(key("1", { isComposing: true }), false);
+  app.State.isPinned = true;
+  assert.equal(key("1"), false);
+  assert.equal(key(","), false);
+  assert.equal(app.State.focusId, "integration_telegram");
+  assert.equal(opened, 1);
+});
+
+test("auto-hidden island parks rendering and wakes compact in click mode", async (t) => {
+  const app = await setupIsland(t, { autoClose: 1 });
+  Object.assign(app.State.settings, { activationMode: "click", autoHideEnabled: true, autoHideInterval: 2 });
+  app.island.applySettings();
+  const collapsed = [];
+  app.Bridge.setCollapsed = async (on) => { collapsed.push(on); };
+  app.island.alert("overview");
+  app.advance(4000);
+  assert.equal(app.State.mode, "hidden");
+  assert.equal(app.frames.size, 0);
+  assert.equal(app.island.wakeTimer, null);
+  assert.deepEqual(collapsed, [true]);
+  const count = app.draws.length;
+  app.advance(60_000);
+  assert.equal(app.draws.length, count);
+  app.island.wakeStrip.dispatch("mouseenter");
+  assert.equal(app.State.mode, "compact");
+  assert.deepEqual(collapsed, [true, false]);
+  app.advance(4000);
+  assert.equal(app.State.mode, "compact");
+  app.island.islandEl.dispatch("mousedown", { clientX: 360, clientY: 20 });
+  assert.equal(app.State.mode, "expanded");
+});
+
+test("disabling auto-hide reveals the island but never unpauses it", async (t) => {
+  const app = await setupIsland(t);
+  app.State.settings.autoHideEnabled = true;
+  app.island.applySettings();
+  app.State.settings.autoHideEnabled = false;
+  app.island.applySettings();
+  assert.equal(app.State.mode, "compact");
+  app.State.settings.autoHideEnabled = true;
+  app.island.applySettings();
+  app.State.paused = true;
+  app.island.fsm.forceHidden();
+  app.State.settings.autoHideEnabled = false;
+  app.island.applySettings();
+  app.island.wakeStrip.dispatch("mouseenter");
+  app.island.wakeStrip.dispatch("mousedown");
+  app.island.onCursor(360, 0);
+  assert.equal(app.State.mode, "hidden");
+});
+
+test("open conversations stay visible with auto-hide enabled", async (t) => {
+  for (const view of ["prompt", "codex", "telegram"]) {
+    await t.test(view, async (t) => {
+      const app = await setupIsland(t, { autoClose: 1 });
+      Object.assign(app.State.settings, { autoHideEnabled: true, autoHideInterval: 1 });
+      app.island.applySettings();
+      app.island.setView(view);
+      app.advance(10_000);
+      assert.equal(app.State.mode, "expanded");
+      app.island.collapse();
+      app.advance(2000);
+      assert.equal(app.State.mode, "hidden");
+    });
+  }
+});
+
 test("auto-close keeps the compact island visible and clickable after a long idle", async (t) => {
   const app = await setupIsland(t, { autoClose: 3 });
   app.island.alert("overview");

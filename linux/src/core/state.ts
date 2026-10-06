@@ -83,6 +83,9 @@ export interface Settings {
   soundEnabled: boolean;
   soundVolume: number;
   autoCloseInterval: number;
+  activationMode: "hover" | "click";
+  autoHideEnabled: boolean;
+  autoHideInterval: number;
   absenceInterval: number;
   activeIntegrations: string[];
   screen: "primary" | "cursor";
@@ -97,6 +100,9 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   soundVolume: 0.12,
   autoCloseInterval: 15,
+  activationMode: "hover",
+  autoHideEnabled: false,
+  autoHideInterval: 30,
   absenceInterval: 180,
   activeIntegrations: [],
   screen: "primary",

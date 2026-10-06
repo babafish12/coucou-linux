@@ -25,6 +25,7 @@ let sends = 0;
 let windowsOpened = 0;
 let focusRequests = 0;
 let notification: TelegramNotification | undefined;
+let notifications: TelegramNotification[] = [];
 let sequence = 10;
 const chats: TelegramChat[] = [
   { id: "101", title: "Mara", lastMessage: "Treffen wir uns um 18:30 am See?", unreadCount: 2 },
@@ -72,17 +73,30 @@ island.alert("overview");
 document.querySelector("#preview-home")!.addEventListener("click", () => island.alert("overview"));
 document.querySelector("#preview-collapse")!.addEventListener("click", () => island.collapse());
 document.querySelector("#preview-hidden")!.addEventListener("click", () => island.fsm.forceHidden());
-document.querySelector("#preview-notify")!.addEventListener("click", () => {
-  const chat = chats[0];
-  const message = { id: String(++sequence), text: "Ich bin jetzt am See. Kommst du auch? 🌅", date: Math.floor(Date.now() / 1000), outgoing: false, senderName: "Mara" };
+function addNotification(chat: TelegramChat, text: string, senderName: string) {
+  const message = { id: String(++sequence), text, date: Math.floor(Date.now() / 1000), outgoing: false, senderName };
   messages.get(chat.id)?.push(message);
   chat.lastMessage = message.text;
   chat.unreadCount++;
   notification = { id: `fixture:${sequence}`, chat: { ...chat }, message };
-  processTelegramNotifications(island, [notification]);
+  notifications = [...notifications, notification].slice(-8);
+}
+document.querySelector("#preview-notify")!.addEventListener("click", () => {
+  addNotification(chats[0], "Ich bin jetzt am See. Kommst du auch? 🌅", "Mara");
+  processTelegramNotifications(island, notifications);
+});
+document.querySelector("#preview-burst")!.addEventListener("click", () => {
+  addNotification(chats[0], "Ich bin jetzt am See. Kommst du auch? 🌅", "Mara");
+  addNotification(chats[1], "[Photo] Die Vorschau ist fertig — können wir sie morgen besprechen?", "Jonas");
+  addNotification(chats[1], "Passt, ich habe die Änderungen gelesen. Die lange Nachricht bleibt vollständig lesbar, ohne die anderen Benachrichtigungen zu verdrängen. ✨", "Lena");
+  processTelegramNotifications(island, notifications);
+});
+document.querySelector("#preview-redact")!.addEventListener("click", () => {
+  notifications = notifications.map((item) => ({ ...item, message: { ...item.message, text: "New message", senderName: "" } }));
+  processTelegramNotifications(island, notifications);
 });
 document.querySelector("#preview-repeat")!.addEventListener("click", () => {
-  if (notification) processTelegramNotifications(island, [notification]);
+  if (notification) processTelegramNotifications(island, notifications);
 });
 document.querySelector("#preview-auto-close")!.addEventListener("click", () => {
   State.settings.autoCloseInterval = 3;

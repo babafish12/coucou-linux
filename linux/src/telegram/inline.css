@@ -56,13 +56,18 @@
 .tg-send-notice { display: block; color: var(--dim); font: 400 9px/13px var(--font); margin-top: 3px; max-height: 27px; overflow-y: auto; overflow-wrap: anywhere; }
 .tg-alert-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; height: 100%; padding: 15px 18px 15px 110px; }
 .tg-alert-heading { display: flex; align-items: center; gap: 7px; min-width: 0; font: 400 11px var(--font); color: #8cc8e9; }
-.tg-alert-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 12px; }
-.tg-alert-sender { color: var(--dim); font-size: 10px; }
+.tg-alert-title { flex-shrink: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 14px; }
+.tg-alert-meta { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--dim); font-size: 10px; }
+.tg-alert-sender { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-alert-time { margin-left: auto; flex-shrink: 0; }
+.tg-alert-count { margin-left: auto; color: var(--dim); font-size: 10px; white-space: nowrap; }
+.tg-alert-nav { display: grid; place-items: center; width: 21px; height: 21px; padding: 0; border: 1px solid #59acd825; border-radius: 6px; background: #2481b51c; color: #8cc8e9; cursor: pointer; }
+.tg-alert-nav:disabled { opacity: .35; cursor: default; }
 .tg-alert-text { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 400 13px/1.5 var(--font); }
 .tg-alert-body .actions { flex-shrink: 0; }
 #header .tg-alert-tab { max-width: 220px; padding: 3px 8px; border-radius: 8px; background: #2481b526; color: #8cc8e9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 10px var(--font); }
-#header .tg-alert-tab[hidden], .tg-alert-sender[hidden] { display: none; }
-.tg-alert-text:focus-visible, .tg-alert-tab:focus-visible { outline: 2px solid #59acd8; outline-offset: -2px; }
+#header .tg-alert-tab[hidden], .tg-alert-sender[hidden], .tg-alert-nav[hidden] { display: none; }
+.tg-alert-text:focus-visible, .tg-alert-tab:focus-visible, .tg-alert-nav:focus-visible { outline: 2px solid #59acd8; outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) {
   .tg-preview, .tg-send, .tg-view { transition: none; }
 }

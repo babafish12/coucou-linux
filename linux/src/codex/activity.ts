@@ -33,6 +33,24 @@ export function codexProjectName(cwd: string): string {
   return cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd || "Local session";
 }
 
+export function codexSessionActive(session: ActivitySession): boolean {
+  return session.state === "working" || session.state === "thinking";
+}
+
+/** Only summarize the current turn, so an earlier result is never shown as current work. */
+export function codexCurrentWork(session: ActivitySession): { message?: ActivityEntry; tool?: ActivityEntry } {
+  let message: ActivityEntry | undefined;
+  let tool: ActivityEntry | undefined;
+  for (const entry of session.entries) {
+    if (entry.kind === "status" && (entry.text === "Started working" || entry.text === "Turn started")) {
+      message = undefined;
+      tool = undefined;
+    } else if (entry.kind === "message") message = entry;
+    else if (entry.kind === "tool") tool = entry;
+  }
+  return { message, tool };
+}
+
 class ActivityStore {
   sessions: ActivitySession[] = [];
   selectedId: string | null = null;
@@ -48,7 +66,6 @@ class ActivityStore {
 
   /** Backend snapshots are authoritative and already bounded by the monitor. */
   apply(snapshot: ActivitySnapshot): void {
-    const active = (session: ActivitySession) => session.state === "working" || session.state === "thinking";
     const sessions = snapshot.sessions.map((session) => ({
       id: session.id, cwd: session.cwd, title: session.title,
       state: session.state, updatedAt: session.updatedAt,
@@ -56,7 +73,7 @@ class ActivityStore {
         id: entry.id, kind: entry.kind, text: entry.text,
         detail: entry.detail, timestamp: entry.timestamp,
       })).sort((a, b) => a.timestamp - b.timestamp),
-    })).sort((a, b) => Number(active(b)) - Number(active(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
+    })).sort((a, b) => Number(codexSessionActive(b)) - Number(codexSessionActive(a)) || b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     const key = JSON.stringify(sessions);
     if (this.loaded && !this.error && key === this.snapshotKey) return;
     this.sessions = sessions;

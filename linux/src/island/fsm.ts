@@ -11,6 +11,9 @@ export class IslandStateMachine {
 
   /** home → petit delay, seconds. */
   homeToPetitDelay = 15;
+  activationMode: "hover" | "click" = "hover";
+  autoHideEnabled = false;
+  autoHideInterval = 30;
   /** coucou → petit once the greeting animation ends (no hover). */
   greetAutoCollapseDelay = 0.6;
   /** coucou → petit while the mouse hovers the greeting. */
@@ -21,6 +24,27 @@ export class IslandStateMachine {
   private homeCollapse: number | null = null;
   private homeDeadline: number | null = null;
   private greetCollapse: number | null = null;
+  private petitHide: number | null = null;
+  private pointerInside = false;
+  private autoHidden = false;
+
+  configure(preferences: {
+    activationMode: "hover" | "click";
+    autoCloseInterval: number;
+    autoHideEnabled: boolean;
+    autoHideInterval: number;
+  }) {
+    const closeChanged = this.homeToPetitDelay !== preferences.autoCloseInterval;
+    const hideChanged = this.autoHideEnabled !== preferences.autoHideEnabled ||
+      this.autoHideInterval !== preferences.autoHideInterval;
+    this.activationMode = preferences.activationMode;
+    this.homeToPetitDelay = preferences.autoCloseInterval;
+    this.autoHideEnabled = preferences.autoHideEnabled;
+    this.autoHideInterval = preferences.autoHideInterval;
+    if (!this.autoHideEnabled) this.autoHidden = false;
+    if (closeChanged && this.state === "home" && !this.pointerInside) this.scheduleHomeCollapse();
+    if (hideChanged) this.schedulePetitHide();
+  }
 
   /** Scheduled home → petit time in performance.now() milliseconds. */
   get homeCollapseDeadline(): number | null {
@@ -30,16 +54,20 @@ export class IslandStateMachine {
   // ── Inputs ──────────────────────────────────────────────────────────────────
 
   launch() {
+    this.autoHidden = false;
     this.cancelTimers();
     this.transition("coucou");
   }
 
   mouseEntered() {
+    this.autoHidden = false;
+    this.pointerInside = true;
+    this.clear("petitHide");
     switch (this.state) {
       case "hidden":
       case "petit":
         this.cancelTimers();
-        this.transition("home");
+        this.transition(this.activationMode === "hover" ? "home" : "petit");
         break;
       case "home":
         this.clear("homeCollapse");
@@ -51,9 +79,12 @@ export class IslandStateMachine {
   }
 
   mouseLeft() {
+    this.pointerInside = false;
     switch (this.state) {
       case "hidden":
+        break;
       case "petit":
+        this.schedulePetitHide();
         break;
       case "home":
         this.scheduleHomeCollapse();
@@ -66,7 +97,8 @@ export class IslandStateMachine {
   }
 
   click() {
-    if (this.state !== "petit") return;
+    if (this.state !== "petit" && this.state !== "hidden") return;
+    this.autoHidden = false;
     this.cancelTimers();
     this.transition("home");
   }
@@ -79,30 +111,45 @@ export class IslandStateMachine {
 
   /** Non-alert work event: show compact from hidden. */
   reveal() {
-    if (this.state !== "hidden") return;
+    if (this.state !== "hidden" || this.autoHidden) return;
     this.cancelTimers();
     this.transition("petit");
   }
 
   /** Alert or explicit request: open straight to expanded. */
   forceHome() {
+    this.autoHidden = false;
     this.cancelTimers();
     this.transition("home");
   }
 
   /// Explicit close (OK button, Escape, an alert being answered).
   forcePetit() {
+    this.autoHidden = false;
     this.cancelTimers();
     this.transition("petit");
   }
 
-  /** Explicit pause only; idle time must leave the compact island visible. */
+  /** Explicit pause; optional idle hiding uses the same native wake strip. */
   forceHidden() {
+    this.autoHidden = false;
     this.cancelTimers();
     this.transition("hidden");
   }
 
   // ── Timers ──────────────────────────────────────────────────────────────────
+
+  private schedulePetitHide() {
+    this.clear("petitHide");
+    if (!this.autoHideEnabled || this.state !== "petit" || this.pointerInside || this.pinned) return;
+    this.petitHide = window.setTimeout(() => {
+      this.petitHide = null;
+      if (this.state === "petit" && !this.pointerInside && !this.pinned) {
+        this.autoHidden = true;
+        this.transition("hidden");
+      }
+    }, this.autoHideInterval * 1000);
+  }
 
   private scheduleHomeCollapse() {
     if (this.pinned) {
@@ -134,7 +181,7 @@ export class IslandStateMachine {
     }, delay * 1000);
   }
 
-  private clear(which: "homeCollapse" | "greetCollapse") {
+  private clear(which: "homeCollapse" | "greetCollapse" | "petitHide") {
     const id = this[which];
     if (id != null) window.clearTimeout(id);
     this[which] = null;
@@ -144,12 +191,14 @@ export class IslandStateMachine {
   cancelTimers() {
     this.clear("homeCollapse");
     this.clear("greetCollapse");
+    this.clear("petitHide");
   }
 
   private transition(next: FsmState) {
     if (next === this.state) return;
     const from = this.state;
     this.state = next;
+    if (next === "petit") this.schedulePetitHide();
     this.onTransition?.(from, next);
   }
 }

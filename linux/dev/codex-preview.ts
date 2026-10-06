@@ -28,6 +28,10 @@ Bridge.focusCodex = async (cwd) => {
   output.textContent = `Fixture focus requests: ${focusRequests} · Project: ${cwd || "latest session"}`;
   if (focusError.checked) throw new Error("No Codex window found. Start Codex and try again.");
 };
+Bridge.openCodexSession = async (sessionId) => {
+  output.textContent = `Fixture opened chat: ${sessionId}`;
+  if (focusError.checked) throw new Error("The selected chat could not be opened. Focus Codex and try again.");
+};
 State.settings.activeIntegrations = [];
 State.settings.soundEnabled = false;
 State.settings.autoCloseInterval = 30;
@@ -36,13 +40,13 @@ State.loadIntegrationTasks();
 State.setFocus("integration_codex");
 
 function apply() {
-  const latest = [...snapshot.sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  CodexActivity.apply(snapshot);
+  const latest = CodexActivity.latest;
   const task = State.tasks.find((task) => task.id === "integration_codex")!;
   task.state = latest?.state === "working" ? "working" : latest?.state === "finished" ? "finished" : "idle";
   task.steps = latest?.entries.map((entry) => entry.text) ?? [];
   task.stepIndex = Math.max(0, task.steps.length - 1);
   task.sessionCwd = latest?.cwd;
-  CodexActivity.apply(snapshot);
 }
 
 function reset() {

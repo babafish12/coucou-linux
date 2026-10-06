@@ -70,7 +70,7 @@ test("unchanged empty notification polls do not wake the hidden island", async (
   }
 });
 
-test("a notification batch surfaces only its newest incoming message without changing chat selection", async (t) => {
+test("a notification batch previews its newest message and keeps all incoming messages available", async (t) => {
   const app = await setup(t);
   const first = notification("1");
   const latest = notification("2", bob);
@@ -80,11 +80,74 @@ test("a notification batch surfaces only its newest incoming message without cha
   app.process([first, latest, outgoing]);
   assert.deepEqual(app.calls.show, [latest]);
   assert.equal(app.TelegramNotifications.current, latest);
+  assert.deepEqual(app.TelegramNotifications.pending, [first, latest]);
   assert.equal(app.State.tasks[1].pillBadge, "finished");
   assert.equal(app.State.focusId, "integration_codex");
   assert.equal(app.InlineTelegram.selected, alice);
   assert.equal(app.InlineTelegram.drafts.get(alice.id), "My unfinished reply");
   assert.equal(app.calls.notifications, 1);
+});
+
+test("notification navigation and dismissal preserve the rest of a burst without replaying alerts", async (t) => {
+  const app = await setup(t);
+  const first = notification("1");
+  const second = notification("2", bob);
+  app.process([first, second]);
+  app.selectTelegramNotification(-1);
+  assert.equal(app.TelegramNotifications.current, first);
+  app.selectTelegramNotification(-1);
+  assert.equal(app.TelegramNotifications.current, first);
+  app.dismissTelegramNotification();
+  assert.equal(app.TelegramNotifications.current, second);
+  app.process([first, second]);
+  assert.deepEqual(app.TelegramNotifications.pending, [second]);
+  app.dismissTelegramNotification();
+  app.process([first, second]);
+  assert.equal(app.TelegramNotifications.current, null);
+  assert.deepEqual(app.TelegramNotifications.pending, []);
+  assert.equal(app.calls.show.length, 1);
+});
+
+test("arrivals during preview do not replace the message being read", async (t) => {
+  const app = await setup(t);
+  const first = notification("1");
+  const second = notification("2", bob);
+  app.process([first]);
+  app.State.mode = "expanded";
+  app.State.view = "telegram-notification";
+  app.process([first, second]);
+  assert.equal(app.TelegramNotifications.current, first);
+  assert.deepEqual(app.TelegramNotifications.pending, [first, second]);
+  assert.equal(app.calls.show.length, 1);
+  app.selectTelegramNotification(1);
+  assert.equal(app.TelegramNotifications.current, second);
+});
+
+test("edited and redacted previews update in place without announcing the message again", async (t) => {
+  const app = await setup(t);
+  const first = notification("1");
+  app.process([first]);
+  const redacted = structuredClone(first);
+  redacted.message.text = "New message";
+  redacted.message.senderName = "";
+  app.process([redacted]);
+  assert.equal(app.TelegramNotifications.current, redacted);
+  assert.equal(app.calls.notifications, 2);
+  assert.equal(app.calls.show.length, 1);
+  app.process([structuredClone(redacted)]);
+  assert.equal(app.calls.notifications, 2);
+});
+
+test("removing the selected alert falls back to another pending preview", async (t) => {
+  const app = await setup(t);
+  const first = notification("1");
+  const second = notification("2", bob);
+  app.process([first, second]);
+  app.State.mode = "expanded";
+  app.State.view = "telegram-notification";
+  app.process([first]);
+  assert.equal(app.TelegramNotifications.current, first);
+  assert.deepEqual(app.calls.views, []);
 });
 
 test("polling an existing notification and dismissing it do not replay the alert", async (t) => {

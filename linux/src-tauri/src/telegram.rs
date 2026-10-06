@@ -819,13 +819,12 @@ impl Worker {
                 self.notifications.pending_delayed = value["have_delayed_notifications"]
                     .as_bool()
                     .unwrap_or(true);
-                if self.notifications.pending_unreceived {
-                    self.notifications.armed_at = None;
-                    self.status.lock().unwrap().notifications.clear();
-                }
+                // This also toggles during normal live delivery. Only wait for
+                // the initial sync; resetting here drops messages being fetched.
                 self.arm_notifications();
             }
             "updateNotificationGroup" => self.notification_group(value, unix_time()),
+            "updateNotification" => self.update_notification(&value["notification"]),
             "updateUnreadMessageCount" | "updateUnreadChatCount" => {
                 // These totals cover the whole main list, including chats that
                 // have not been loaded into our bounded history-window cache.
@@ -1005,7 +1004,7 @@ impl Worker {
             // suppressed there. A zero sound id means silent, not muted.
             if content["@type"] != "notificationTypeNewMessage"
                 || raw_message["is_outgoing"].as_bool().unwrap_or(true)
-                || date <= armed_at
+                || date < armed_at
                 || now.saturating_sub(date) >= NOTIFICATION_TTL.as_secs() as i64
                 || date > now.saturating_add(5)
             {
@@ -1043,6 +1042,37 @@ impl Worker {
                 notification_id: id,
                 received_at: Instant::now(),
             });
+        }
+    }
+
+    fn update_notification(&mut self, notification: &Value) {
+        let Some(id) = notification["id"].as_i64() else {
+            return;
+        };
+        let content = &notification["type"];
+        if content["@type"] != "notificationTypeNewMessage" {
+            return;
+        }
+        let mut message = self.message(&content["message"]);
+        if message.id == "0" || message.outgoing {
+            return;
+        }
+        if content["show_preview"].as_bool() != Some(true) {
+            message.text = "New message".into();
+            message.sender_name.clear();
+        }
+        // Edits and preview-privacy changes replace an existing alert in place;
+        // they never resurrect an expired or startup notification.
+        if let Some(existing) = self
+            .status
+            .lock()
+            .unwrap()
+            .notifications
+            .iter_mut()
+            .find(|item| item.notification_id == id)
+        {
+            existing.chat.last_message = message.text.clone();
+            existing.message = message;
         }
     }
 
@@ -1421,12 +1451,46 @@ mod tests {
         worker.notification_group(&notification_update(13, now), now);
         assert_eq!(worker.status.lock().unwrap().notifications.len(), 1);
         worker.update(&json!({"@type":"updateHavePendingNotifications","have_unreceived_notifications":true,"have_delayed_notifications":true}));
-        assert!(worker.status.lock().unwrap().notifications.is_empty());
+        assert_eq!(worker.status.lock().unwrap().notifications.len(), 1);
         worker.notification_group(&notification_update(14, now), now);
         worker.update(&json!({"@type":"updateHavePendingNotifications","have_unreceived_notifications":false,"have_delayed_notifications":true}));
-        assert!(worker.notifications.armed_at.is_none());
+        assert_eq!(worker.notifications.armed_at, Some(now - 1));
         worker.update(&json!({"@type":"updateHavePendingNotifications","have_unreceived_notifications":false,"have_delayed_notifications":false}));
         worker.notification_group(&notification_update(14, now), now);
+        assert_eq!(worker.status.lock().unwrap().notifications.len(), 2);
+    }
+
+    #[test]
+    fn notification_in_the_activation_second_is_not_lost() {
+        let mut worker = notification_worker();
+        let now = unix_time();
+        worker.notifications.armed_at = Some(now);
+        worker.notification_group(&notification_update(11, now), now);
+        assert_eq!(worker.status.lock().unwrap().notifications.len(), 1);
+    }
+
+    #[test]
+    fn notification_updates_replace_preview_without_replaying_old_alerts() {
+        let mut worker = notification_worker();
+        let now = unix_time();
+        worker.notification_group(&notification_update(11, now), now);
+        let original = worker.status.lock().unwrap().notifications[0].clone();
+        let mut update = json!({"@type":"updateNotification", "notification_group_id":1,
+            "notification":notification_update(11, now)["added_notifications"][0].clone()});
+        update["notification"]["type"]["message"]["content"]["text"]["text"] = json!("Corrected message");
+        worker.update(&update);
+        let current = worker.status.lock().unwrap().notifications[0].clone();
+        assert_eq!(current.message.text, "Corrected message");
+        assert_eq!(current.chat.last_message, "Corrected message");
+        assert_eq!(current.id, original.id);
+        assert_eq!(current.received_at, original.received_at);
+        update["notification"]["type"]["show_preview"] = json!(false);
+        worker.update(&update);
+        let current = worker.status.lock().unwrap().notifications[0].clone();
+        assert_eq!(current.message.text, "New message");
+        assert!(current.message.sender_name.is_empty());
+        worker.status.lock().unwrap().notifications.clear();
+        worker.update(&update);
         assert!(worker.status.lock().unwrap().notifications.is_empty());
     }
 

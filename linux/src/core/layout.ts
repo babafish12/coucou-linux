@@ -81,7 +81,7 @@ export const VIEW_LAYOUTS: Record<IslandViewName, ViewLayout> = {
   prompt: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
   codex: { height: 300, botX: 38, botY: 66, botDiameter: 22, agentMode: "none" },
   telegram: { height: 300, botX: 38, botY: 66, botDiameter: 22, agentMode: "none" },
-  "telegram-notification": { height: 220, botX: 62, botY: null, botDiameter: 56, agentMode: "none" },
+  "telegram-notification": { height: 270, botX: 62, botY: null, botDiameter: 56, agentMode: "none" },
   searching: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
   result: { height: 160, botX: 52, botY: null, botDiameter: 44, agentMode: "column" },
   note: { height: 160, botX: 60, botY: null, botDiameter: 50, agentMode: "column" },

@@ -19,13 +19,20 @@ transitions, and reading or replying does not open a second window. Click
 **Send** to send a text reply to the selected chat.
 
 New Telegram notifications automatically expand the island with the chat name
-and message preview. **Reply** opens that conversation inside the island;
-**Dismiss** closes the preview. The preview does not take keyboard focus and
+and message preview, including the sender and message time. When several arrive
+together, the counter and arrow buttons let you browse all pending previews.
+A new arrival keeps the message you are currently reading on screen. **Reply**
+opens that preview's conversation inside the island; **Dismiss** removes just
+that preview and shows the next one, closing when none remain. Edited messages
+and changes to preview privacy update the existing preview without announcing it
+again. The preview does not take keyboard focus and
 uses the existing auto-close interval, pausing while the mouse is over it.
 While you are writing, handling an approval, or using another active view, a
 **New Telegram message** button appears in the header instead of replacing your
 work. Telegram's muted chats and preview-privacy settings are respected.
 Existing notifications restored at startup or reconnection stay quiet.
+After the initial synchronization, fresh notifications continue to arrive while
+Telegram fetches further updates in the background.
 
 Chat lists and the selected conversation refresh about every five seconds while
 their island view is visible. The collapsed or hidden island does not fetch chat

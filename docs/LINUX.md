@@ -30,10 +30,19 @@ want Coucou to start when you sign in. If a release build already exists, use
 
 Use **Coucou** in your applications menu or run `coucou`. Start `coucou --settings`
 to open settings, including when Coucou is already running. Quit through its
-system tray menu. Mochi stays visible as a compact island when idle; hover over it
-to open it immediately. Auto-close returns to the compact island after the pointer
-leaves. Conversation views stay open until you close them or switch views. **Pause** in the tray menu can
-still hide it explicitly.
+system tray menu. **Settings → General → Open the island** chooses whether hover
+or a click opens the compact island (default: hover). **Auto-close** returns to
+compact after the pointer leaves. Enable **Hide when idle** to hide the compact
+island after a separate delay (1–3600 seconds; disabled by default).
+Hover at the top centre of the display to bring it back; Click mode reveals it
+compact first. Conversation views and pending approvals stay open until handled
+or explicitly closed. New alerts can still appear; background work leaves an
+auto-hidden island hidden. **Pause** in the tray hides it until you resume.
+
+While the island has keyboard focus, **Ctrl+,** opens the settings window and
+**Ctrl+1–5** selects the corresponding Home integration. Meta works as an
+alternative to Ctrl. Shortcuts do not interrupt pending approvals and are not
+registered globally; the resting island does not capture keyboard focus.
 
 To make the application menu follow each new local release build, run once after
 building:
@@ -54,14 +63,17 @@ copy. Startup entries created through settings also use the managed launcher.
 
 - **Activity:** watches recent local `CODEX_HOME/sessions` JSONL logs incrementally
   (`~/.codex/sessions` by default). The Home card shows the latest session; click
-  it for a scrollable activity view with session selection. Recent completed
-  sessions remain visible, alongside public progress messages, action summaries
-  and timestamps. A short user task labels each session. Tool details show
+  it for **Current work**, showing the task, latest progress and current action.
+  Active chats appear above recent completed chats. **Activity** opens the full
+  history; **Open chat** opens the selected conversation in Codex Desktop.
+  A short user task labels each session. Tool details show
   selected paths and summarized commands; raw tool outputs and internal
   reasoning are excluded. This read-only view stays open while you inspect it.
 - **Window focus:** the Codex card's corner arrow and **Focus Codex** button
-  activate an existing Codex desktop window on Hyprland. If no matching
-  window is available, the activity view reports it.
+  switch to the workspace of an existing Codex desktop window on Hyprland,
+  keeping the mouse pointer in place. If that workspace is already visible,
+  nothing changes. If no matching window is available, the activity view
+  reports it.
 - **Approvals:** answer permissions and questions in Codex itself. Reading a log
   does not provide an approval channel, so Coucou never displays an Allow button
   for a monitored Codex session. **Open chat** on completion opens the exact

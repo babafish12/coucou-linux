@@ -4,12 +4,30 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ActivationMode {
+    #[default]
+    Hover,
+    Click,
+}
+
+fn default_auto_hide_interval() -> f64 {
+    30.0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub sound_enabled: bool,
     pub sound_volume: f64,
     pub auto_close_interval: f64,
+    #[serde(default)]
+    pub activation_mode: ActivationMode,
+    #[serde(default)]
+    pub auto_hide_enabled: bool,
+    #[serde(default = "default_auto_hide_interval")]
+    pub auto_hide_interval: f64,
     pub absence_interval: f64,
     pub active_integrations: Vec<String>,
     /// "primary" = the main display, "cursor" = whichever display the mouse is on.
@@ -34,6 +52,9 @@ impl Default for Settings {
             sound_enabled: true,
             sound_volume: 0.12,
             auto_close_interval: 15.0,
+            activation_mode: ActivationMode::Hover,
+            auto_hide_enabled: false,
+            auto_hide_interval: default_auto_hide_interval(),
             absence_interval: 180.0,
             active_integrations: Vec::new(),
             screen: "primary".into(),
@@ -106,5 +127,33 @@ mod tests {
         assert_eq!(roundtrip.reasoning_effort, "high");
         assert_eq!(roundtrip.sound_volume, 0.37);
         assert!(serde_json::to_value(roundtrip).unwrap().get("hooksInstalled").is_none());
+    }
+
+    #[test]
+    fn older_preferences_keep_hover_and_visible_compact_defaults() {
+        let mut saved = serde_json::to_value(Settings::default()).unwrap();
+        for key in ["activationMode", "autoHideEnabled", "autoHideInterval"] {
+            saved.as_object_mut().unwrap().remove(key);
+        }
+        saved["autoCloseInterval"] = serde_json::json!(7.0);
+        let loaded: Settings = serde_json::from_value(saved).unwrap();
+        assert_eq!(loaded.activation_mode, ActivationMode::Hover);
+        assert!(!loaded.auto_hide_enabled);
+        assert_eq!(loaded.auto_hide_interval, 30.0);
+        assert_eq!(loaded.auto_close_interval, 7.0);
+    }
+
+    #[test]
+    fn click_and_auto_hide_preferences_survive_roundtrip() {
+        let settings = Settings {
+            activation_mode: ActivationMode::Click,
+            auto_hide_enabled: true,
+            auto_hide_interval: 12.0,
+            ..Settings::default()
+        };
+        let loaded: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        assert_eq!(loaded.activation_mode, ActivationMode::Click);
+        assert!(loaded.auto_hide_enabled);
+        assert_eq!(loaded.auto_hide_interval, 12.0);
     }
 }
