@@ -463,10 +463,11 @@ pub fn set_activating(win: &WebviewWindow, activating: bool) {
                     .unwrap_or_default();
                 if let Some((address, _)) = hyprland_client_for_title(&title) {
                     let selector = format!("address:{address}");
-                    if !hyprland_command_ok(&format!(
-                        "/eval hl.dispatch(hl.dsp.focus({{window='{selector}'}}))"
-                    )) {
-                        let _ = hyprland_command_ok(&format!("/dispatch focuswindow {selector}"));
+                    if let Err(error) = crate::hyprland::dispatch_preserving_cursor(
+                        &format!("return hl.dispatch(hl.dsp.focus({{window='{selector}'}}))"),
+                        &format!("focuswindow {selector}"),
+                    ) {
+                        crate::log::line(format!("island focus failed: {error}"));
                     }
                 }
                 if let Some(native) = gtk.window() {

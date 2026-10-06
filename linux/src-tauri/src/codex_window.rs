@@ -1,11 +1,18 @@
-//! Focus an existing Codex desktop window without opening a working folder.
+//! Show an existing Codex desktop workspace without moving the pointer.
 
+use crate::hyprland::{dispatch_preserving_cursor, request};
 use serde::Deserialize;
 use std::cmp::Reverse;
-use std::io::{Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+
+#[derive(Deserialize)]
+struct Workspace {
+    #[serde(default)]
+    id: i64,
+    name: String,
+    // Newer Hyprland separates the stable address from the display name.
+    address: Option<String>,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +29,9 @@ struct Client {
     mapped: bool,
     #[serde(default)]
     hidden: bool,
+    #[serde(default)]
+    pinned: bool,
+    workspace: Option<Workspace>,
     #[serde(default = "unknown_focus_order", rename = "focusHistoryID")]
     focus_history_id: i64,
 }
@@ -91,35 +101,36 @@ fn select_client<'a>(
         })
 }
 
-fn request(command: &str) -> Result<String, String> {
-    let runtime =
-        std::env::var_os("XDG_RUNTIME_DIR").ok_or("Hyprland runtime directory is unavailable.")?;
-    let instance = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
-        .map_err(|_| "Focusing Codex currently requires a Hyprland session.".to_string())?;
-    if instance.is_empty() || instance.contains('/') || instance == "." || instance == ".." {
-        return Err("Invalid Hyprland instance identifier.".into());
+fn workspace_selector(workspace: &Workspace) -> Result<String, String> {
+    if let Some(address) = workspace.address.as_ref().filter(|value| !value.is_empty()) {
+        return Ok(address.clone());
     }
-    let socket = PathBuf::from(runtime)
-        .join("hypr")
-        .join(instance)
-        .join(".socket.sock");
-    let mut stream =
-        UnixStream::connect(socket).map_err(|error| format!("Cannot reach Hyprland: {error}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_millis(500)))
-        .map_err(|error| error.to_string())?;
-    stream
-        .set_write_timeout(Some(Duration::from_millis(500)))
-        .map_err(|error| error.to_string())?;
-    stream
-        .write_all(command.as_bytes())
-        .map_err(|error| error.to_string())?;
-    let mut response = String::new();
-    stream
-        .take(2 * 1024 * 1024)
-        .read_to_string(&mut response)
-        .map_err(|error| error.to_string())?;
-    Ok(response)
+    if workspace.id > 0 {
+        return Ok(workspace.id.to_string());
+    }
+    if workspace.name.starts_with("special:") || workspace.name == "special" {
+        return Ok(workspace.name.clone());
+    }
+    if !workspace.name.is_empty() {
+        return Ok(format!("name:{}", workspace.name));
+    }
+    Err("The Codex window has no available workspace.".into())
+}
+
+fn workspace_visible(workspace: &Workspace, monitors: &serde_json::Value) -> bool {
+    monitors.as_array().is_some_and(|monitors| {
+        monitors.iter().any(|monitor| {
+            ["activeWorkspace", "specialWorkspace"].iter().any(|key| {
+                let active = &monitor[key];
+                if let Some(address) = workspace.address.as_ref().filter(|value| !value.is_empty())
+                {
+                    active["address"].as_str() == Some(address.as_str())
+                } else {
+                    workspace.id != 0 && active["id"].as_i64() == Some(workspace.id)
+                }
+            })
+        })
+    })
 }
 
 pub fn focus(cwd: Option<&str>) -> Result<(), String> {
@@ -131,21 +142,31 @@ pub fn focus(cwd: Option<&str>) -> Result<(), String> {
         std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
     })
     .ok_or("No Codex desktop window is open. Open Codex, then try again.")?;
-    let selector = format!("address:{}", client.address);
-    // Current Hyprland uses Lua dispatchers; older releases use focuswindow.
-    let lua = format!("/eval hl.dispatch(hl.dsp.focus({{window='{selector}'}}))");
-    if request(&lua).is_ok_and(|response| response.trim() == "ok") {
+    if client.pinned {
         return Ok(());
     }
-    let response = request(&format!("/dispatch focuswindow {selector}"))?;
-    if response.trim() == "ok" {
-        Ok(())
-    } else {
-        Err(format!(
-            "Hyprland could not focus Codex: {}",
-            response.trim()
-        ))
+    let workspace = client
+        .workspace
+        .as_ref()
+        .ok_or("The Codex window has no available workspace.")?;
+    let monitors = serde_json::from_str(&request("j/monitors")?)
+        .map_err(|error| format!("Cannot read Hyprland monitors: {error}"))?;
+    // Repeated clicks must not trigger workspace_back_and_forth, hide a special
+    // workspace, or activate another window on an already visible workspace.
+    if workspace_visible(workspace, &monitors) {
+        return Ok(());
     }
+    let target = workspace_selector(workspace)?;
+    // Resolve the current workspace again inside Hyprland in case the window
+    // moved since j/clients. Only the validated hex address enters Lua code.
+    let lua = format!(
+        "local w = hl.get_window('address:{}'); \
+         assert(w and w.workspace, 'The Codex window has no available workspace.'); \
+         if not w.workspace.active then \
+         return hl.dispatch(hl.dsp.focus({{workspace=w.workspace}})) end",
+        client.address
+    );
+    dispatch_preserving_cursor(&lua, &format!("workspace {target}"))
 }
 
 #[cfg(test)]
@@ -223,9 +244,102 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "explicitly focuses the real desktop window"]
+    fn workspace_targets_support_numbered_named_special_and_renamed_workspaces() {
+        for (json, expected) in [
+            (r#"{"id":3,"name":"Code"}"#, "3"),
+            (
+                r#"{"id":-1337,"name":"Code projects"}"#,
+                "name:Code projects",
+            ),
+            (r#"{"id":-99,"name":"special:scratch"}"#, "special:scratch"),
+            (r#"{"name":"Renamed","address":"name:Code"}"#, "name:Code"),
+        ] {
+            let workspace = serde_json::from_str(json).unwrap();
+            assert_eq!(workspace_selector(&workspace).unwrap(), expected);
+        }
+        let missing = serde_json::from_str(r#"{"id":0,"name":""}"#).unwrap();
+        assert!(workspace_selector(&missing).is_err());
+    }
+
+    #[test]
+    fn visible_workspaces_are_unchanged_including_other_monitors_and_specials() {
+        let monitors = serde_json::json!([
+            {"activeWorkspace":{"id":1},"specialWorkspace":{"id":0}},
+            {"activeWorkspace":{"id":3,"address":"3"},
+             "specialWorkspace":{"id":-99,"address":"special:scratch"}}
+        ]);
+        for json in [
+            r#"{"id":1,"name":"1"}"#,
+            r#"{"id":3,"name":"Code","address":"3"}"#,
+            r#"{"id":-99,"name":"special:scratch"}"#,
+        ] {
+            let workspace = serde_json::from_str(json).unwrap();
+            assert!(workspace_visible(&workspace, &monitors));
+        }
+        for json in [
+            r#"{"id":2,"name":"2"}"#,
+            r#"{"id":0,"name":""}"#,
+            r#"{"id":0,"name":"","address":""}"#,
+            r#"{"id":3,"name":"Code","address":"name:Other"}"#,
+        ] {
+            let workspace = serde_json::from_str(json).unwrap();
+            assert!(!workspace_visible(&workspace, &monitors));
+        }
+    }
+
+    #[test]
+    #[ignore = "explicitly switches the real desktop workspace"]
     fn focus_existing_codex_window_live() {
         assert_eq!(std::env::var("COUCOU_TEST_CODEX_FOCUS").as_deref(), Ok("1"));
-        focus(std::env::var("COUCOU_TEST_CODEX_CWD").ok().as_deref()).unwrap();
+        let cwd = std::env::var("COUCOU_TEST_CODEX_CWD").ok();
+        let path = cwd.as_ref().map(PathBuf::from);
+        let path = path.map(|path| path.canonicalize().unwrap_or(path));
+        let windows = clients(&request("j/clients").unwrap());
+        let target = select_client(&windows, path.as_deref(), |pid| {
+            std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
+        })
+        .unwrap();
+        let target_workspace = target.workspace.as_ref().unwrap();
+        let cursor_options = || {
+            [
+                "no_warps",
+                "warp_on_change_workspace",
+                "warp_on_monitor_change",
+                "warp_on_toggle_special",
+            ]
+            .map(|key| {
+                let value: serde_json::Value =
+                    serde_json::from_str(&request(&format!("j/getoption cursor:{key}")).unwrap())
+                        .unwrap();
+                (value["bool"].clone(), value["int"].clone())
+            })
+        };
+        let options = cursor_options();
+        let before = request("j/cursorpos").unwrap();
+        if let Ok(workspace) = std::env::var("COUCOU_TEST_CODEX_FROM_WORKSPACE") {
+            let workspace: u32 = workspace.parse().unwrap();
+            assert!(workspace > 0);
+            assert_ne!(
+                workspace_selector(target_workspace).unwrap(),
+                workspace.to_string()
+            );
+            dispatch_preserving_cursor(
+                &format!("return hl.dispatch(hl.dsp.focus({{workspace={workspace}}}))"),
+                &format!("workspace {workspace}"),
+            )
+            .unwrap();
+            assert_eq!(request("j/cursorpos").unwrap(), before);
+            let monitors = serde_json::from_str(&request("j/monitors").unwrap()).unwrap();
+            assert!(!workspace_visible(target_workspace, &monitors));
+        }
+        focus(cwd.as_deref()).unwrap();
+        let monitors = serde_json::from_str(&request("j/monitors").unwrap()).unwrap();
+        assert!(workspace_visible(target_workspace, &monitors));
+        assert_eq!(request("j/cursorpos").unwrap(), before);
+        let workspace = request("j/activeworkspace").unwrap();
+        focus(cwd.as_deref()).unwrap();
+        assert_eq!(request("j/activeworkspace").unwrap(), workspace);
+        assert_eq!(request("j/cursorpos").unwrap(), before);
+        assert_eq!(cursor_options(), options);
     }
 }

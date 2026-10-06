@@ -8,6 +8,7 @@ mod codex_window;
 mod autostart_linux;
 mod encoding;
 mod files;
+mod hyprland;
 mod integrations;
 #[path = "island_linux.rs"]
 mod island;
