@@ -59,6 +59,13 @@ the same build simply activates the existing instance. This preference survives
 later installer runs. Use `--copy-build` to return to using only the installed
 copy. Startup entries created through settings also use the managed launcher.
 
+For builds supporting `--chat` and `--clipboard-chat`, the launcher forwards
+these requests over the session D-Bus using `busctl` when the selected build is
+already running, avoiding another Tauri process and repeated executable scans.
+If the build changed, Coucou is closed, or `busctl` is unavailable, it uses the
+normal verified launch path. Existing keybindings need no changes after
+reinstalling the launcher.
+
 ## Codex behavior
 
 - **Activity:** watches recent local `CODEX_HOME/sessions` JSONL logs incrementally

@@ -54,7 +54,8 @@ class LauncherTests(unittest.TestCase):
             captured.append((launcher.fingerprint(fd), argv, env))
             raise Executed()
 
-        with patch.object(launcher, "running_builds", return_value=processes), \
+        with patch.object(launcher, "dbus_call", side_effect=FileNotFoundError("busctl")), \
+                patch.object(launcher, "running_builds", return_value=processes), \
                 patch.object(launcher, "stop_verified") as stop, \
                 patch.object(launcher.os, "execve", side_effect=execute):
             with self.assertRaises(Executed):
@@ -88,6 +89,100 @@ class LauncherTests(unittest.TestCase):
         result, stop = self.invoke([(42, (str(self.build), "1", 2, 3), self.new, running_fd)])
         self.assertEqual(result[0], self.new)
         stop.assert_not_called()
+
+    def shortcut_identity(self):
+        metadata = self.build.stat()
+        return str(self.build), "123", metadata.st_dev, metadata.st_ino
+
+    def shortcut_replies(self):
+        return [json.dumps({"data": [":1.42"]}), json.dumps({"data": [42]}), ""]
+
+    def test_running_shortcuts_forward_without_hashing_scanning_saving_or_starting_tauri(self):
+        launcher.save_config(self.install / "launcher.json", self.config)
+        for flag in ("--chat", "--clipboard-chat"):
+            with self.subTest(flag=flag), \
+                    patch.object(launcher, "dbus_call", side_effect=self.shortcut_replies()) as bus, \
+                    patch.object(launcher, "process_identity", return_value=self.shortcut_identity()) as identity, \
+                    patch.object(launcher, "fingerprint") as fingerprint, \
+                    patch.object(launcher, "running_builds") as scan, \
+                    patch.object(launcher, "save_config") as save, \
+                    patch.object(launcher.os, "execve") as execute:
+                launcher.launch(self.install, [flag])
+                identity.assert_called_once_with(42)
+                self.assertEqual(bus.call_count, 3)
+                self.assertEqual(bus.call_args_list[1].args[-1], ":1.42")
+                bus.assert_called_with(
+                    ":1.42", launcher.DBUS_PATH, "org.SingleInstance.DBus", "ExecuteCallback",
+                    "ass", "2", str(self.build), flag, os.getcwd(),
+                )
+                for unnecessary in (fingerprint, scan, save, execute):
+                    unnecessary.assert_not_called()
+
+    def test_only_single_exact_chat_flags_use_the_shortcut_path(self):
+        with self.build.open("rb") as stream, patch.object(launcher, "dbus_call") as bus:
+            for arguments in ([], ["--settings"], ["--telegram"], ["--chat=1"],
+                              ["--chat", "--clipboard-chat"], ["--chat", "extra"]):
+                self.assertFalse(launcher.forward_shortcut(self.build, stream.fileno(), arguments))
+            bus.assert_not_called()
+
+    def test_changed_build_and_unverified_bus_owners_require_normal_launch(self):
+        path, started, device, inode = self.shortcut_identity()
+        for identity in (None, ("/some/other/coucou", started, device, inode),
+                         (path, started, device, inode + 1), (path, started, device + 1, inode)):
+            with self.subTest(identity=identity), self.build.open("rb") as stream, \
+                    patch.object(launcher, "dbus_call", side_effect=self.shortcut_replies()) as bus, \
+                    patch.object(launcher, "process_identity", return_value=identity):
+                self.assertFalse(launcher.forward_shortcut(self.build, stream.fileno(), ["--chat"]))
+                self.assertEqual(bus.call_count, 2)
+
+    def test_unsafe_executable_does_not_use_the_shortcut_path(self):
+        self.build.chmod(0o775)
+        with self.build.open("rb") as stream, patch.object(launcher, "dbus_call") as bus:
+            self.assertFalse(launcher.forward_shortcut(self.build, stream.fileno(), ["--chat"]))
+            bus.assert_not_called()
+
+    def test_unavailable_or_invalid_bus_lookup_falls_back_before_dispatch(self):
+        for reply in (FileNotFoundError("busctl"), subprocess.CalledProcessError(1, "busctl"),
+                      subprocess.TimeoutExpired("busctl", 2), "invalid json", "{}",
+                      '{"data": []}', '{"data": [null]}', '{"data": ["not-a-unique-owner"]}'):
+            with self.subTest(reply=reply), self.build.open("rb") as stream, \
+                    patch.object(launcher, "dbus_call", side_effect=[reply]) as bus:
+                self.assertFalse(launcher.forward_shortcut(self.build, stream.fileno(), ["--chat"]))
+                self.assertEqual(bus.call_count, 1)
+
+    def test_unavailable_bus_preserves_cold_start_arguments(self):
+        for flag in ("--chat", "--clipboard-chat"):
+            result, stop = self.invoke([], (flag,))
+            self.assertEqual(result[0], self.new)
+            self.assertEqual(result[1], [str(self.build), flag])
+            stop.assert_not_called()
+
+    def test_unconfirmed_clipboard_dispatch_is_not_replayed(self):
+        launcher.save_config(self.install / "launcher.json", self.config)
+        for error in (subprocess.TimeoutExpired("busctl", 2), subprocess.CalledProcessError(1, "busctl")):
+            replies = self.shortcut_replies()[:2] + [error]
+            with self.subTest(error=error), \
+                    patch.object(launcher, "dbus_call", side_effect=replies) as bus, \
+                    patch.object(launcher, "process_identity", return_value=self.shortcut_identity()), \
+                    patch.object(launcher, "fingerprint") as fingerprint, \
+                    patch.object(launcher.os, "execve") as execute:
+                with self.assertRaisesRegex(RuntimeError, "Check the chat before retrying"):
+                    launcher.launch(self.install, ["--clipboard-chat"])
+                self.assertEqual(bus.call_count, 3)
+                fingerprint.assert_not_called()
+                execute.assert_not_called()
+
+    def test_dbus_arguments_are_literal_and_the_call_is_bounded(self):
+        arguments = ("ass", "2", str(self.build), "--clipboard-chat", "/cwd with spaces ;$(false)")
+        with patch.object(launcher.subprocess, "run", return_value=Mock(stdout="reply")) as run:
+            self.assertEqual(launcher.dbus_call(
+                ":1.42", launcher.DBUS_PATH, "org.SingleInstance.DBus", "ExecuteCallback", *arguments,
+            ), "reply")
+            run.assert_called_once_with(
+                ["busctl", "--user", "--auto-start=no", "--timeout=1", "--json=short", "--",
+                 "call", ":1.42", launcher.DBUS_PATH, "org.SingleInstance.DBus", "ExecuteCallback", *arguments],
+                check=True, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=2,
+            )
 
     def test_reused_pid_is_never_signalled(self):
         with patch.object(launcher.os, "pidfd_open", return_value=100), \

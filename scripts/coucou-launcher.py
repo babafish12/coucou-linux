@@ -9,8 +9,13 @@ from pathlib import Path
 import select
 import signal
 import stat
+import subprocess
 import sys
 import tempfile
+
+
+DBUS_NAME = "fr.louisraille.coucou.SingleInstance"
+DBUS_PATH = "/fr/louisraille/coucou/SingleInstance"
 
 
 def owned_regular(metadata):
@@ -99,6 +104,53 @@ def process_identity(pid, proc=Path("/proc")):
     return path, started, metadata.st_dev, metadata.st_ino
 
 
+def dbus_call(service, path, interface, method, *arguments):
+    return subprocess.run(
+        ["busctl", "--user", "--auto-start=no", "--timeout=1", "--json=short", "--",
+         "call", service, path, interface, method, *arguments],
+        check=True, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=2,
+    ).stdout
+
+
+def forward_shortcut(target, fd, arguments):
+    if arguments not in (["--chat"], ["--clipboard-chat"]):
+        return False
+    metadata = os.fstat(fd)
+    if not owned_regular(metadata):
+        return False
+    try:
+        owner = json.loads(dbus_call(
+            "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+            "GetNameOwner", "s", DBUS_NAME,
+        ))["data"][0]
+        if not isinstance(owner, str) or not owner.startswith(":"):
+            return False
+        pid = json.loads(dbus_call(
+            "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+            "GetConnectionUnixProcessID", "s", owner,
+        ))["data"][0]
+        if type(pid) is not int or pid <= 0:
+            return False
+        identity = process_identity(pid)
+        # Only bypass build verification when the bus owner runs the exact
+        # selected inode. A rebuilt/replaced executable takes the normal path.
+        if (identity is None or identity[0] != str(target.resolve())
+                or identity[2:] != (metadata.st_dev, metadata.st_ino)):
+            return False
+    except (OSError, ValueError, KeyError, IndexError, TypeError, subprocess.SubprocessError):
+        # No running app, no busctl, or an unavailable bus: launch normally.
+        return False
+
+    try:
+        # Pin the verified connection, since the well-known name can change owners.
+        dbus_call(owner, DBUS_PATH, "org.SingleInstance.DBus", "ExecuteCallback",
+                  "ass", "2", str(target), arguments[0], os.getcwd())
+    except (OSError, subprocess.SubprocessError) as error:
+        # A timed-out request may already have pasted. Never replay it implicitly.
+        raise RuntimeError("Coucou did not confirm the shortcut. Check the chat before retrying.") from error
+    return True
+
+
 def running_builds(config, opened, proc=Path("/proc")):
     allowed = set(config["managedPaths"])
     processes = []
@@ -163,6 +215,8 @@ def launch(install_dir, arguments):
         opened.append(fd)
         if not os.access(target, os.X_OK):
             raise RuntimeError(f"Coucou is not executable: {target}")
+        if forward_shortcut(target, fd, arguments):
+            return
         digest = fingerprint(fd)
         path = str(target.resolve())
         if path not in config["managedPaths"]:
